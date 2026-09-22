@@ -3,13 +3,13 @@ import {
   PhoneOff, Mic, MicOff, Volume2, VolumeX, Sparkles, Send, 
   Calendar, CheckCircle, Clock, Building2, Globe, AlertCircle, 
   Bot, User, UserX, RefreshCw, Mail, MessageSquare, Waves, Radio, Activity,
-  ShieldCheck, Layers, Lock, CheckSquare, HelpCircle, AlertTriangle
+  ShieldCheck, Layers, Lock, CheckSquare, HelpCircle, AlertTriangle, Brain, Eye, Award
 } from 'lucide-react';
 import { 
   Candidate, ChatMessage, CallScenario, ScreeningData, InterviewSlot,
   CandidateRemark, RemarkPriority, RemarkCategory,
   ConversationMemory, HrDecisionOutcome, AfterCallAction,
-  QuestionStateEngine, QuestionTopic
+  QuestionStateEngine, QuestionTopic, RealTimeBehaviorState
 } from '../types';
 import { WHITE_COLLAR_JOB_DESCRIPTIONS } from '../data/jobDescriptions';
 import { voiceAudio } from '../utils/audioSpeech';
@@ -101,10 +101,35 @@ export const VoiceCallModal: React.FC<VoiceCallModalProps> = ({
 
   const [hrDecisionOutcome, setHrDecisionOutcome] = useState<HrDecisionOutcome | undefined>(candidate.hrDecisionOutcome);
   const [afterCallAction, setAfterCallAction] = useState<AfterCallAction | null>(candidate.afterCallAction || null);
-  const [rightPanelTab, setRightPanelTab] = useState<'checklist' | 'questions' | 'memory' | 'action'>('checklist');
+  const [rightPanelTab, setRightPanelTab] = useState<'checklist' | 'questions' | 'behavior' | 'memory' | 'action'>('checklist');
+  const [realTimeBehavior, setRealTimeBehavior] = useState<RealTimeBehaviorState | null>(null);
   const [questionEngineState, setQuestionEngineState] = useState<QuestionStateEngine>(() =>
     createInitialQuestionStateEngine(candidate)
   );
+
+  const analyzeCandidateTurnLive = async (turnText: string) => {
+    try {
+      const res = await fetch('/api/brain/behavior/analyze-turn', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          turnText,
+          previousAgentText: transcript.filter((t) => t.sender === 'agent').slice(-1)[0]?.text,
+          turnIndex: transcript.length + 1,
+          callStage: rightPanelTab === 'questions' ? 'QUESTIONING' : 'SCREENING',
+          candidateName: candidate.name,
+          callId: `call_${Date.now()}_${candidate.id}`,
+          existingState: realTimeBehavior,
+        }),
+      });
+      if (res.ok) {
+        const updatedState = await res.json();
+        setRealTimeBehavior(updatedState);
+      }
+    } catch (e) {
+      console.warn('Real-time behavior turn analysis non-blocking error:', e);
+    }
+  };
 
   const transcriptEndRef = useRef<HTMLDivElement>(null);
   const liveClientRef = useRef<GeminiLiveClient | null>(null);
@@ -386,6 +411,9 @@ export const VoiceCallModal: React.FC<VoiceCallModalProps> = ({
 
     setInputMessage('');
     setIsProcessing(true);
+
+    // Continuous Real-Time Behavior Intelligence Signal Extraction
+    analyzeCandidateTurnLive(text);
   };
 
   const handleSimulateSilence = () => {
@@ -491,6 +519,7 @@ export const VoiceCallModal: React.FC<VoiceCallModalProps> = ({
       conversationMemory: (postCallResult?.conversationMemory || conversationMemory) as ConversationMemory,
       hrDecisionOutcome: analyzedOutcome as HrDecisionOutcome,
       afterCallAction: postCallResult?.afterCallAction || afterCallAction || undefined,
+      latestBehaviorReport: postCallResult?.behaviorReport || candidate.latestBehaviorReport,
       latestRemark: newRemark,
       remarksHistory: [newRemark, ...(candidate.remarksHistory || [])],
       alertDueDate: alertDueDate,
@@ -513,6 +542,7 @@ export const VoiceCallModal: React.FC<VoiceCallModalProps> = ({
           conversationMemory: (postCallResult?.conversationMemory || conversationMemory) as ConversationMemory,
           hrDecisionOutcome: analyzedOutcome as HrDecisionOutcome,
           afterCallAction: postCallResult?.afterCallAction || afterCallAction || undefined,
+          behaviorReport: postCallResult?.behaviorReport,
         },
         ...candidate.callHistory,
       ],
@@ -982,6 +1012,20 @@ export const VoiceCallModal: React.FC<VoiceCallModalProps> = ({
               </button>
               <button
                 type="button"
+                onClick={() => setRightPanelTab('behavior')}
+                className={`flex-1 py-1.5 rounded-lg font-semibold transition cursor-pointer text-center relative ${
+                  rightPanelTab === 'behavior'
+                    ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
+                    : 'text-slate-400 hover:text-slate-200'
+                }`}
+              >
+                Behavior & Tone
+                {realTimeBehavior && (
+                  <span className="inline-block w-1.5 h-1.5 rounded-full bg-amber-400 ml-1.5 animate-pulse" />
+                )}
+              </button>
+              <button
+                type="button"
                 onClick={() => setRightPanelTab('action')}
                 className={`flex-1 py-1.5 rounded-lg font-semibold transition cursor-pointer text-center ${
                   rightPanelTab === 'action'
@@ -1331,6 +1375,111 @@ export const VoiceCallModal: React.FC<VoiceCallModalProps> = ({
                     <span className="font-bold text-amber-400">{conversationMemory.next_action || 'Screening in progress'}</span>
                   </div>
                 </div>
+              </div>
+            )}
+
+            {/* TAB: Live Behavior & Communication Intelligence */}
+            {rightPanelTab === 'behavior' && (
+              <div className="space-y-3 text-xs">
+                {/* Real-Time Communication Tone Header */}
+                <div className="p-3 rounded-xl bg-slate-900/90 border border-slate-800 space-y-2">
+                  <div className="flex items-center justify-between border-b border-slate-800 pb-2">
+                    <div className="flex items-center gap-1.5">
+                      <Brain className="w-4 h-4 text-amber-400" />
+                      <span className="font-bold text-white text-[11px]">Real-Time Tone & Signal Analysis</span>
+                    </div>
+                    <span className="text-[10px] px-2 py-0.5 rounded font-mono font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30">
+                      LIVE
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2 text-[11px] pt-1">
+                    <div className="p-2 rounded-lg bg-slate-950/60 border border-slate-800">
+                      <span className="text-slate-400 text-[10px] block">Current Tone:</span>
+                      <span className="font-bold text-white capitalize">
+                        {realTimeBehavior?.currentTone || 'Neutral / Cooperative'}
+                      </span>
+                    </div>
+                    <div className="p-2 rounded-lg bg-slate-950/60 border border-slate-800">
+                      <span className="text-slate-400 text-[10px] block">Impatience Level:</span>
+                      <span className={`font-bold capitalize ${
+                        realTimeBehavior?.impatienceLevel === 'high'
+                          ? 'text-rose-400'
+                          : realTimeBehavior?.impatienceLevel === 'moderate'
+                          ? 'text-amber-400'
+                          : 'text-emerald-400'
+                      }`}>
+                        {realTimeBehavior?.impatienceLevel || 'Low'}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Active Recruiter Directive */}
+                  {realTimeBehavior?.activeDirectives && realTimeBehavior.activeDirectives.length > 0 && (
+                    <div className="p-2.5 rounded-lg bg-amber-500/10 border border-amber-500/30 space-y-1">
+                      <span className="text-[10px] font-bold text-amber-300 flex items-center gap-1">
+                        <Sparkles className="w-3.5 h-3.5" />
+                        <span>Adaptive Conversation Guidance (Rule 32):</span>
+                      </span>
+                      <ul className="text-slate-200 text-[11px] space-y-1 list-disc list-inside">
+                        {realTimeBehavior.activeDirectives.map((d, i) => (
+                          <li key={i}>{d}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                </div>
+
+                {/* Detected Verbal Signals Log */}
+                <div className="p-3 rounded-xl bg-slate-900/80 border border-slate-800 space-y-2">
+                  <div className="flex items-center justify-between border-b border-slate-800 pb-1.5">
+                    <span className="font-bold text-slate-300 text-[11px] flex items-center gap-1.5">
+                      <Activity className="w-3.5 h-3.5 text-blue-400" />
+                      <span>Extracted Verbal Signals ({realTimeBehavior?.detectedSignals?.length || 0})</span>
+                    </span>
+                    <span className="text-[10px] text-slate-400">Observable facts only</span>
+                  </div>
+
+                  {realTimeBehavior?.detectedSignals && realTimeBehavior.detectedSignals.length > 0 ? (
+                    <div className="space-y-1.5 max-h-48 overflow-y-auto">
+                      {realTimeBehavior.detectedSignals.map((sig, idx) => (
+                        <div key={idx} className="p-2 rounded-lg bg-slate-950/70 border border-slate-800 space-y-0.5">
+                          <div className="flex items-center justify-between text-[10px]">
+                            <span className="font-bold text-amber-400 capitalize">{sig.dimension}</span>
+                            <span className="text-slate-500 font-mono">{sig.timestamp}</span>
+                          </div>
+                          <p className="text-slate-300 text-[11px]">{sig.observation}</p>
+                          {sig.evidence && (
+                            <p className="text-slate-400 text-[10px] italic font-mono">"{sig.evidence}"</p>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-slate-400 text-[11px] italic py-2 text-center">
+                      Listening to candidate utterances... Signals will appear as conversation unfolds.
+                    </p>
+                  )}
+                </div>
+
+                {/* Prior Call Behavioral Memory if available */}
+                {candidate.latestBehaviorReport && (
+                  <div className="p-3 rounded-xl bg-slate-950/80 border border-slate-800 space-y-1.5 text-[11px]">
+                    <span className="font-bold text-slate-400 text-[10px] uppercase tracking-wider block">
+                      Prior Call Communication Profile:
+                    </span>
+                    <p className="text-slate-300">
+                      {candidate.latestBehaviorReport.behaviorSummary}
+                    </p>
+                    <div className="flex items-center gap-2 pt-1">
+                      <span className="text-[10px] text-slate-400">Patience:</span>
+                      <span className="text-emerald-400 font-semibold capitalize">{candidate.latestBehaviorReport.patience}</span>
+                      <span className="text-slate-600">•</span>
+                      <span className="text-[10px] text-slate-400">Cooperation:</span>
+                      <span className="text-blue-400 font-semibold capitalize">{candidate.latestBehaviorReport.cooperation}</span>
+                    </div>
+                  </div>
+                )}
               </div>
             )}
 

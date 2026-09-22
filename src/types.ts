@@ -68,6 +68,7 @@ export interface CallRecord {
   conversationMemory?: ConversationMemory;
   hrDecisionOutcome?: HrDecisionOutcome;
   afterCallAction?: AfterCallAction;
+  behaviorReport?: CandidateBehaviorReport;
 }
 
 export type RemarkPriority = 'Urgent' | 'High' | 'Medium' | 'Low';
@@ -124,6 +125,9 @@ export interface Candidate {
   hrDecisionOutcome?: HrDecisionOutcome;
   afterCallAction?: AfterCallAction;
   callHistory: CallRecord[];
+  latestBehaviorReport?: CandidateBehaviorReport;
+  humanReviewRequired?: boolean;
+  humanReviewReason?: string;
   scorecard?: {
     gurgaonDubaiScore: 'High' | 'Medium' | 'Low' | 'None';
     experienceFit: 'Senior Fit' | 'Mid Fit' | 'Junior Fit';
@@ -558,6 +562,10 @@ export interface NextCallBrief {
     responseStyle: string;
     preferredTimeWindow?: string;
   };
+  observedBehaviorSummary?: string;
+  adaptiveConversationDirectives?: string[];
+  behaviorTrend?: string;
+  humanReviewFlagged?: boolean;
   previousPromises: string[];
   callbackRequestDetails?: {
     requestedTime?: string;
@@ -661,6 +669,252 @@ export interface HrBrainOverviewStats {
     layer5_RecruitmentLearning: string;
     layer6_HumanFeedback: string;
   };
+  behaviorInsightsCount?: number;
+  humanReviewRequiredCount?: number;
+}
+
+// ============================================================================
+// CANDIDATE BEHAVIOR & CONVERSATION INTELLIGENCE ENGINE (RULES 1–43)
+// ============================================================================
+
+export type ObservedCommunicationTone =
+  | 'professional'
+  | 'friendly'
+  | 'neutral'
+  | 'formal'
+  | 'informal'
+  | 'direct'
+  | 'conversational'
+  | 'brief'
+  | 'detailed'
+  | 'enthusiastic'
+  | 'reserved';
+
+export type ObservedPoliteness =
+  | 'polite'
+  | 'generally polite'
+  | 'neutral'
+  | 'occasionally abrupt'
+  | 'frequently abrupt'
+  | 'disrespectful language observed';
+
+export type ObservedRespectfulness =
+  | 'respectful'
+  | 'generally respectful'
+  | 'neutral'
+  | 'occasionally dismissive'
+  | 'repeatedly dismissive'
+  | 'disrespectful language observed';
+
+export type ObservedCooperation =
+  | 'COOPERATIVE'
+  | 'MOSTLY_COOPERATIVE'
+  | 'NEUTRAL'
+  | 'HESITANT'
+  | 'RELUCTANT'
+  | 'NON_RESPONSIVE';
+
+export type ObservedPatience =
+  | 'waits for recruiter to finish'
+  | 'listens fully'
+  | 'interrupts occasionally'
+  | 'interrupts repeatedly'
+  | 'asks recruiter to hurry'
+  | 'becomes impatient during detailed questions'
+  | 'good';
+
+export type InterruptionClassification =
+  | 'none'
+  | 'natural interruption'
+  | 'problematic interruption';
+
+export type ListeningResponseQuality =
+  | 'DIRECT'
+  | 'PARTIAL'
+  | 'VAGUE'
+  | 'OFF_TOPIC'
+  | 'CLARIFICATION_REQUESTED'
+  | 'DETAILED'
+  | 'EVIDENCE_BASED';
+
+export type EngagementLevel = 'HIGH' | 'MEDIUM' | 'LOW' | 'VARIABLE';
+
+export type ImpatienceLevel = 'NONE' | 'TEMPORARY_IMPATIENCE' | 'REPEATED_IMPATIENCE';
+
+export type ConfidenceSignal = 'CLEARLY_ARTICULATED' | 'MODERATELY_CLEAR' | 'UNCERTAIN' | 'VAGUE';
+
+export type NegotiationStyleObserved =
+  | 'consultative'
+  | 'value-based'
+  | 'direct'
+  | 'aggressive'
+  | 'flexible'
+  | 'structured'
+  | 'discount-focused'
+  | 'relationship-focused'
+  | 'unclear';
+
+export type ConversationalAdaptability = 'HIGH' | 'MEDIUM' | 'LOW';
+
+export type BehaviorTrend =
+  | 'STABLE'
+  | 'IMPROVING'
+  | 'DECLINING'
+  | 'VARIABLE'
+  | 'INSUFFICIENT_DATA';
+
+export interface BehaviorEvidenceItem {
+  dimension: string;
+  observation: string;
+  evidence: string;
+  timestamp: string;
+  conversationId: string;
+  confidence: number;
+  source: 'transcript' | 'audio_signal' | 'explicit_statement';
+}
+
+export interface BehaviorTimelineStage {
+  stage: 'opening' | 'screening' | 'role_discussion' | 'compensation' | 'scenario' | 'interview_scheduling' | 'closing' | string;
+  tone: string;
+  engagement: string;
+  observation: string;
+  timestamp?: string;
+}
+
+export interface ScenarioBehaviorEvaluation {
+  scenarioTitle: string;
+  objectionHandlingStepsUsed: string[]; // e.g. ["understand objection", "ask questions", "identify concern", "explain value"]
+  negotiationStyle: NegotiationStyleObserved;
+  conversationalAdaptability: ConversationalAdaptability;
+  customerHandlingApproach: string;
+  observation: string;
+  ownershipShown: string; // e.g. "Candidate distinguished personal contribution in luxury deals"
+}
+
+export interface BehaviorScoreMultiDimensional {
+  communication: {
+    clarity: number; // 1-5
+    responsiveness: number; // 1-5
+    engagement: number; // 1-5
+  };
+  interaction: {
+    politeness: number; // 1-5
+    respectfulness: number; // 1-5
+    cooperation: number; // 1-5
+    patience: number; // 1-5
+  };
+  conversation: {
+    interruptions: number; // 1-5 (1 = frequent problematic, 5 = no problematic interruptions)
+    topic_drift: number; // 1-5 (5 = stay on topic)
+    answer_relevance: number; // 1-5
+  };
+}
+
+export interface CandidateCommunicationPreference {
+  language: string;
+  responseStyle: 'brief' | 'detailed' | 'conversational' | 'direct';
+  preferredTime: string;
+  communicationPreference: 'direct' | 'consultative' | 'detailed' | 'concise';
+}
+
+/**
+ * Structured schema as mandated by Section 38 & 36
+ */
+export interface CandidateBehaviorReport {
+  id: string;
+  candidateId: string;
+  candidateName: string;
+  conversationId: string;
+  timestamp: string;
+  confidence: number;
+
+  communicationStyle: {
+    primaryTone: ObservedCommunicationTone;
+    secondaryTones: ObservedCommunicationTone[];
+    summary: string;
+    isBrief: boolean;
+    isDetailed: boolean;
+  };
+
+  interactionBehavior: {
+    politeness: ObservedPoliteness;
+    respectfulness: ObservedRespectfulness;
+    cooperation: ObservedCooperation;
+    patience: ObservedPatience;
+  };
+
+  engagement: {
+    level: EngagementLevel;
+    rationale: string;
+    interestSignals: string[]; // e.g. "asked about luxury projects", "asked about salary structure"
+    concernSignals: string[]; // e.g. "asked about target structure"
+  };
+
+  conversationSignals: {
+    listeningResponseQuality: ListeningResponseQuality;
+    confidenceSignals: ConfidenceSignal;
+    answerOwnership: string; // personal contribution vs team results
+    accountabilitySignals: string; // problem analysis approach vs blaming team
+    interruptions: {
+      frequency: 'no interruptions' | 'occasional interruption' | 'frequent interruption' | 'repeated interruption before question completion';
+      classification: InterruptionClassification;
+      count: number;
+      notes: string;
+    };
+    impatience: {
+      level: ImpatienceLevel;
+      evidence: string[];
+    };
+    frustrationSignals: {
+      detected: boolean;
+      evidence: string[];
+    };
+    aggressiveLanguage: {
+      detected: boolean;
+      severity: 'none' | 'low' | 'medium' | 'high';
+      evidence: string[];
+      count: number;
+    };
+  };
+
+  scenarioBehavior: ScenarioBehaviorEvaluation[];
+
+  behaviorTimeline: BehaviorTimelineStage[];
+
+  evidence: BehaviorEvidenceItem[];
+
+  candidatePreferences: CandidateCommunicationPreference;
+
+  behaviorTrend: {
+    trend: BehaviorTrend;
+    historicalCallCount: number;
+    trendDescription: string;
+  };
+
+  adaptiveRecommendations: {
+    recommendedAgentPacing: 'concise_questions' | 'conversational_space' | 'keep_call_concise' | 'deep_scenario' | 'simplify_questions' | 'shorter_turns';
+    guidance: string;
+  };
+
+  behaviorScore: BehaviorScoreMultiDimensional;
+
+  humanReviewRequired: boolean;
+  humanReviewReasons: string[];
+
+  limitations: string[];
+}
+
+export interface RealTimeBehaviorState {
+  currentTone: ObservedCommunicationTone;
+  currentPoliteness: ObservedPoliteness;
+  currentCooperation: ObservedCooperation;
+  currentEngagement: EngagementLevel;
+  runningImpatienceScore: number;
+  runningInterruptionCount: number;
+  problematicInterruptionDetected: boolean;
+  activeLanguageObserved: 'English' | 'Hindi' | 'Hinglish';
+  recommendedNextTurnStyle: string;
+  recentObservations: string[];
 }
 
 

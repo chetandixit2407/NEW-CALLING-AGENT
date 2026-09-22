@@ -5,6 +5,7 @@ import {
 } from '../../src/types';
 import { memoryRepository } from '../repositories/memoryRepository';
 import { conversationRepository } from '../repositories/conversationRepository';
+import { behaviorRepository } from '../repositories/behaviorRepository';
 
 export class DecisionEngine {
   /**
@@ -159,6 +160,27 @@ export class DecisionEngine {
     const concerns = memory?.concerns.map((c) => c.concern) || [];
     const questionsToAddress = memory?.candidateQuestions.filter((q) => !q.answered).map((q) => q.question) || [];
 
+    // Retrieve latest candidate communication & behavior intelligence (Rules 30, 31, 32)
+    const latestBehavior = behaviorRepository.getLatestBehaviorReport(candidate.id);
+    const adaptiveDirectives: string[] = [];
+
+    if (latestBehavior) {
+      if (latestBehavior.adaptiveRecommendations?.guidance) {
+        adaptiveDirectives.push(latestBehavior.adaptiveRecommendations.guidance);
+      }
+      if (latestBehavior.communicationStyle.isBrief) {
+        adaptiveDirectives.push('Candidate communicates concisely: keep questions direct and avoid lengthy preamble.');
+      } else if (latestBehavior.communicationStyle.isDetailed) {
+        adaptiveDirectives.push('Candidate provides detailed answers: allow conversational space for real estate examples.');
+      }
+      if (latestBehavior.conversationSignals.impatience.level !== 'NONE') {
+        adaptiveDirectives.push('Candidate previously noted time constraints: prioritize essential screening milestones and slot booking.');
+      }
+      if (latestBehavior.conversationSignals.interruptions.classification === 'problematic interruption') {
+        adaptiveDirectives.push('Candidate may interrupt before questions finish: use shorter speech turns and yield quickly.');
+      }
+    }
+
     const brief: NextCallBrief = {
       candidateId: candidate.id,
       candidateName: candidate.name,
@@ -175,10 +197,14 @@ export class DecisionEngine {
       candidateConcerns: concerns,
       candidateQuestionsToAddress: questionsToAddress,
       communicationPreferences: {
-        language: memory?.communicationPreferences?.preferredLanguage || 'Auto (Hinglish/Hindi/English)',
-        responseStyle: memory?.communicationPreferences?.communicationStyle || 'conversational',
-        preferredTimeWindow: memory?.communicationPreferences?.bestTimeToCall,
+        language: latestBehavior?.candidatePreferences?.language || memory?.communicationPreferences?.preferredLanguage || 'Auto (Hinglish/Hindi/English)',
+        responseStyle: latestBehavior?.candidatePreferences?.responseStyle || memory?.communicationPreferences?.communicationStyle || 'conversational',
+        preferredTimeWindow: latestBehavior?.candidatePreferences?.preferredTime || memory?.communicationPreferences?.bestTimeToCall,
       },
+      observedBehaviorSummary: latestBehavior?.communicationStyle?.summary,
+      adaptiveConversationDirectives: adaptiveDirectives.length > 0 ? adaptiveDirectives : undefined,
+      behaviorTrend: latestBehavior?.behaviorTrend?.trendDescription,
+      humanReviewFlagged: latestBehavior?.humanReviewRequired,
       previousPromises: memory?.candidateSpecificLearnings || [],
       callbackRequestDetails: memory?.communicationPreferences?.preferredCallbackWindow
         ? { requestedTime: memory.communicationPreferences.preferredCallbackWindow }

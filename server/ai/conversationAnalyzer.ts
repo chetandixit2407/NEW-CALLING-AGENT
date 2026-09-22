@@ -4,11 +4,13 @@ import {
   CandidateMemoryContradiction,
   CandidateCorrectionRecord,
   LearningProposal,
+  CandidateBehaviorReport,
 } from '../../src/types';
 import { memoryManager } from './memoryManager';
 import { memoryRepository } from '../repositories/memoryRepository';
 import { conversationRepository } from '../repositories/conversationRepository';
 import { learningEngine } from './learningEngine';
+import { candidateBehaviorAnalyzer } from './behaviorAnalyzer';
 
 export interface PostCallAnalysisResult {
   extractedFields: Record<string, any>;
@@ -17,6 +19,7 @@ export interface PostCallAnalysisResult {
   candidateQuestions: string[];
   candidateObjections: string[];
   candidateConcerns: string[];
+  behaviorReport: CandidateBehaviorReport;
   statusAnalysis: {
     candidateStatus: string;
     interviewStatus: string;
@@ -278,6 +281,16 @@ export class ConversationAnalyzer {
       ineffectiveQuestions: [],
     });
 
+    // Run Candidate Behavior & Conversation Intelligence Analysis (Rules 1-43)
+    const behaviorReport = await candidateBehaviorAnalyzer.analyzeCallBehavior({
+      candidate,
+      transcript,
+      callScenario,
+      callDuration,
+      conversationId,
+      genAIClient,
+    });
+
     const result: PostCallAnalysisResult = {
       extractedFields: rawExtracted,
       detectedContradictions: memoryUpdate.contradictions,
@@ -285,6 +298,7 @@ export class ConversationAnalyzer {
       candidateQuestions,
       candidateObjections,
       candidateConcerns: [],
+      behaviorReport,
       statusAnalysis: {
         candidateStatus: candStatus,
         interviewStatus: intStatus,

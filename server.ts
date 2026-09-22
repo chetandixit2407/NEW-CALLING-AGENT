@@ -2887,6 +2887,59 @@ app.get('/api/brain/scenario-stats', (req, res) => {
   }
 });
 
+// 10. Candidate Behavior & Conversation Intelligence Engine (Rules 1-43)
+app.get('/api/brain/behavior/history/:id', (req, res) => {
+  try {
+    const history = aiHrBrain.getCandidateBehaviorHistory(req.params.id);
+    return res.json(history);
+  } catch (err: any) {
+    console.error('Error fetching candidate behavior history:', err);
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/brain/behavior/latest/:id', (req, res) => {
+  try {
+    const report = aiHrBrain.getLatestBehaviorReport(req.params.id);
+    if (!report) {
+      return res.status(404).json({ error: 'No behavior report found for candidate' });
+    }
+    return res.json(report);
+  } catch (err: any) {
+    console.error('Error fetching latest behavior report:', err);
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/brain/behavior/flagged-reviews', (req, res) => {
+  try {
+    const flagged = aiHrBrain.getFlaggedForHumanReview();
+    return res.json(flagged);
+  } catch (err: any) {
+    console.error('Error fetching flagged behavior reviews:', err);
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/brain/behavior/analyze-turn', (req, res) => {
+  try {
+    const { turnText, previousAgentText, turnIndex, callStage, candidateName, callId, existingState } = req.body;
+    const realTimeState = aiHrBrain.analyzeCandidateTurn({
+      turnText: turnText || '',
+      previousAgentText,
+      turnIndex: turnIndex || 0,
+      callStage,
+      candidateName,
+      callId,
+      existingState,
+    });
+    return res.json(realTimeState);
+  } catch (err: any) {
+    console.error('Error analyzing candidate turn:', err);
+    return res.status(500).json({ error: err.message });
+  }
+});
+
 // Vite middleware & Production static serving
 async function startServer() {
   if (process.env.NODE_ENV !== 'production') {

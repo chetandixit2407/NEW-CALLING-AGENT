@@ -6,11 +6,15 @@ import {
   HumanFeedbackRecord,
   HrBrainOverviewStats,
   CallRecord,
+  CandidateBehaviorReport,
+  RealTimeBehaviorState,
 } from '../../src/types';
 import { memoryRepository } from '../repositories/memoryRepository';
 import { conversationRepository } from '../repositories/conversationRepository';
+import { behaviorRepository } from '../repositories/behaviorRepository';
 import { memoryManager } from './memoryManager';
 import { conversationAnalyzer, PostCallAnalysisResult } from './conversationAnalyzer';
+import { candidateBehaviorAnalyzer } from './behaviorAnalyzer';
 import { decisionEngine } from './decisionEngine';
 import { learningEngine } from './learningEngine';
 
@@ -98,6 +102,7 @@ export class SingleAiHrBrain {
       },
       hrDecisionOutcome: result.statusAnalysis.hrDecisionOutcome as any,
       afterCallAction: result.afterCallAction as any,
+      behaviorReport: result.behaviorReport,
     };
 
     conversationRepository.saveConversation(record);
@@ -160,10 +165,44 @@ export class SingleAiHrBrain {
   }
 
   /**
-   * 8. Brain Overview & System Metrics
+   * 8. Candidate Behavior & Conversation Intelligence (Rules 1–43)
+   */
+  public getCandidateBehaviorHistory(candidateId: string): CandidateBehaviorReport[] {
+    return behaviorRepository.getCandidateBehaviorHistory(candidateId);
+  }
+
+  public getLatestBehaviorReport(candidateId: string): CandidateBehaviorReport | null {
+    return behaviorRepository.getLatestBehaviorReport(candidateId);
+  }
+
+  public getFlaggedForHumanReview(): CandidateBehaviorReport[] {
+    return behaviorRepository.getFlaggedForHumanReview();
+  }
+
+  public analyzeCandidateTurn(params: {
+    turnText: string;
+    previousAgentText?: string;
+    turnIndex: number;
+    callStage?: string;
+    candidateName?: string;
+    callId?: string;
+    existingState?: RealTimeBehaviorState;
+  }): RealTimeBehaviorState {
+    return candidateBehaviorAnalyzer.analyzeCandidateTurn(params);
+  }
+
+  /**
+   * 9. Brain Overview & System Metrics
    */
   public getBrainOverviewStats(): HrBrainOverviewStats {
-    return memoryRepository.getBrainOverviewStats();
+    const baseStats = memoryRepository.getBrainOverviewStats();
+    const allBehaviors = behaviorRepository.getAllCandidateBehaviorReports();
+    const flagged = behaviorRepository.getFlaggedForHumanReview();
+    return {
+      ...baseStats,
+      behaviorInsightsCount: allBehaviors.length,
+      humanReviewRequiredCount: flagged.length,
+    };
   }
 
   public getQuestionStats() {

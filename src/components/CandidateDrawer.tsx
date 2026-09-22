@@ -7,6 +7,7 @@ import {
   Check
 } from 'lucide-react';
 import { Candidate, CallRecord, CandidateLongTermMemory, NextCallBrief } from '../types';
+import { CandidateBehaviorCard } from './CandidateBehaviorCard';
 
 interface CandidateDrawerProps {
   candidate: Candidate | null;
@@ -577,6 +578,14 @@ export const CandidateDrawer: React.FC<CandidateDrawerProps> = ({
                 )}
               </div>
             )}
+          </div>
+
+          {/* Candidate Behavior & Conversation Intelligence Section (Rules 1-43) */}
+          <div>
+            <CandidateBehaviorCard
+              candidateId={candidate.id}
+              initialReport={candidate.latestBehaviorReport}
+            />
           </div>
 
           {/* Call Logs & Transcripts */}

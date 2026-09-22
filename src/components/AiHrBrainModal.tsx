@@ -21,6 +21,7 @@ import {
   ThumbsUp,
   ThumbsDown,
   Target,
+  ShieldAlert,
 } from 'lucide-react';
 import {
   HrBrainOverviewStats,
@@ -28,7 +29,9 @@ import {
   Candidate,
   NextCallBrief,
   CandidateLongTermMemory,
+  CandidateBehaviorReport,
 } from '../types';
+import { CandidateBehaviorCard } from './CandidateBehaviorCard';
 
 interface AiHrBrainModalProps {
   isOpen: boolean;
@@ -43,15 +46,16 @@ export const AiHrBrainModal: React.FC<AiHrBrainModalProps> = ({
   candidates,
   onSelectCandidateForCall,
 }) => {
-  const [activeTab, setActiveTab] = useState<'overview' | 'proposals' | 'audit' | 'questions' | 'brief_sim'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'proposals' | 'behavior' | 'brief_sim' | 'audit' | 'questions'>('overview');
   const [stats, setStats] = useState<HrBrainOverviewStats | null>(null);
   const [proposals, setProposals] = useState<LearningProposal[]>([]);
   const [auditTrail, setAuditTrail] = useState<any[]>([]);
   const [questionStats, setQuestionStats] = useState<any[]>([]);
   const [scenarioStats, setScenarioStats] = useState<any[]>([]);
+  const [flaggedReviews, setFlaggedReviews] = useState<CandidateBehaviorReport[]>([]);
   const [isLoading, setIsLoading] = useState(false);
 
-  // Next Call Brief simulation state
+  // Next Call Brief / Behavior candidate selection state
   const [selectedCandidateId, setSelectedCandidateId] = useState<string>(candidates[0]?.id || '');
   const [nextBrief, setNextBrief] = useState<NextCallBrief | null>(null);
   const [briefLoading, setBriefLoading] = useState(false);
@@ -74,12 +78,13 @@ export const AiHrBrainModal: React.FC<AiHrBrainModalProps> = ({
   const loadBrainData = async () => {
     setIsLoading(true);
     try {
-      const [statsRes, propRes, auditRes, qRes, scRes] = await Promise.all([
+      const [statsRes, propRes, auditRes, qRes, scRes, flagRes] = await Promise.all([
         fetch('/api/brain/stats').then((r) => r.json()),
         fetch('/api/brain/proposals').then((r) => r.json()),
         fetch('/api/brain/audit-trail').then((r) => r.json()),
         fetch('/api/brain/question-stats').then((r) => r.json()),
         fetch('/api/brain/scenario-stats').then((r) => r.json()),
+        fetch('/api/brain/behavior/flagged-reviews').then((r) => (r.ok ? r.json() : [])),
       ]);
 
       setStats(statsRes);
@@ -87,6 +92,7 @@ export const AiHrBrainModal: React.FC<AiHrBrainModalProps> = ({
       setAuditTrail(auditRes || []);
       setQuestionStats(qRes || []);
       setScenarioStats(scRes || []);
+      setFlaggedReviews(flagRes || []);
     } catch (err) {
       console.error('Error fetching HR Brain data:', err);
     } finally {
@@ -208,6 +214,18 @@ export const AiHrBrainModal: React.FC<AiHrBrainModalProps> = ({
           >
             <Sparkles className="w-4 h-4" />
             <span>Learning Proposals ({proposals.filter((p) => p.status === 'PENDING_REVIEW').length} Pending)</span>
+          </button>
+
+          <button
+            onClick={() => setActiveTab('behavior')}
+            className={`flex items-center gap-2 py-3 px-4 border-b-2 transition whitespace-nowrap ${
+              activeTab === 'behavior'
+                ? 'border-amber-400 text-amber-400 bg-amber-500/5'
+                : 'border-transparent text-slate-400 hover:text-slate-200'
+            }`}
+          >
+            <Brain className="w-4 h-4" />
+            <span>Behavior & Conversation Intelligence {flaggedReviews.length > 0 ? `(${flaggedReviews.length} Flagged)` : ''}</span>
           </button>
 
           <button
@@ -467,6 +485,159 @@ export const AiHrBrainModal: React.FC<AiHrBrainModalProps> = ({
             </div>
           )}
 
+          {activeTab === 'behavior' && (
+            <div className="space-y-5">
+              {/* Behavior Overview Card */}
+              <div className="p-5 rounded-2xl bg-[#0b1325] border border-slate-800">
+                <div className="flex items-start justify-between flex-wrap gap-4 mb-4">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <Brain className="w-5 h-5 text-amber-400" />
+                      <h3 className="text-sm font-bold text-white uppercase tracking-wider">
+                        Candidate Behavior & Conversation Intelligence Center
+                      </h3>
+                    </div>
+                    <p className="text-xs text-slate-400 mt-1">
+                      Autonomous post-call communication profiling • Evidence-based verbal signal extraction • Adaptive conversational pacing
+                    </p>
+                  </div>
+
+                  {/* Candidate Selector */}
+                  <div className="flex items-center gap-2">
+                    <label className="text-xs text-slate-400">Select Candidate:</label>
+                    <select
+                      value={selectedCandidateId}
+                      onChange={(e) => setSelectedCandidateId(e.target.value)}
+                      className="bg-slate-900 border border-slate-700 text-xs text-white rounded-lg px-3 py-1.5 focus:outline-hidden focus:border-amber-400"
+                    >
+                      {candidates.map((c) => (
+                        <option key={c.id} value={c.id}>
+                          {c.name} ({c.appliedRole})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+
+                {/* Flagged Review Alert if any */}
+                {flaggedReviews.length > 0 && (
+                  <div className="mb-4 p-3 rounded-xl bg-rose-950/30 border border-rose-500/30 text-xs text-rose-200 flex items-start gap-2.5">
+                    <ShieldAlert className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
+                    <div className="flex-1">
+                      <div className="font-bold text-rose-300">
+                        {flaggedReviews.length} Candidate Profile{flaggedReviews.length !== 1 ? 's' : ''} Flagged for Recruiter Human Review (Rule 40)
+                      </div>
+                      <div className="text-[11px] text-slate-300 mt-1 space-y-0.5">
+                        {flaggedReviews.map((f, i) => (
+                          <div key={i}>
+                            • <span className="text-white font-semibold">{f.candidateName || f.candidateId}</span>: {f.humanReviewReasons?.join('; ') || 'Unusual communication behavior'}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Candidate Behavior Card */}
+                <CandidateBehaviorCard
+                  candidateId={selectedCandidateId}
+                  initialReport={candidates.find((c) => c.id === selectedCandidateId)?.latestBehaviorReport}
+                />
+              </div>
+
+              {/* Adaptive Communication Rules Matrix (Rule 32) */}
+              <div className="p-5 rounded-2xl bg-[#0b1325] border border-slate-800 space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Sparkles className="w-4 h-4 text-amber-400" />
+                    <h4 className="text-xs font-bold uppercase tracking-wider text-white">
+                      Adaptive Conversation Rules Matrix (Rule 32)
+                    </h4>
+                  </div>
+                  <span className="text-[11px] text-slate-400">Autonomous Recruiter Directives</span>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2.5 text-xs">
+                  <div className="p-3 rounded-xl bg-slate-900/70 border border-slate-800">
+                    <div className="font-bold text-amber-300 mb-1 text-[11px]">If Candidate is Brief</div>
+                    <p className="text-slate-300 text-[11px]">
+                      Ask concise, high-value questions; avoid long exploratory preambles.
+                    </p>
+                  </div>
+
+                  <div className="p-3 rounded-xl bg-slate-900/70 border border-slate-800">
+                    <div className="font-bold text-blue-300 mb-1 text-[11px]">If Candidate is Detailed</div>
+                    <p className="text-slate-300 text-[11px]">
+                      Allow conversational space; avoid cutting off explanations prematurely.
+                    </p>
+                  </div>
+
+                  <div className="p-3 rounded-xl bg-slate-900/70 border border-slate-800">
+                    <div className="font-bold text-rose-300 mb-1 text-[11px]">If Busy or Impatient</div>
+                    <p className="text-slate-300 text-[11px]">
+                      Keep the call concise; prioritize only essential role facts and scheduling.
+                    </p>
+                  </div>
+
+                  <div className="p-3 rounded-xl bg-slate-900/70 border border-slate-800">
+                    <div className="font-bold text-emerald-300 mb-1 text-[11px]">If Highly Engaged</div>
+                    <p className="text-slate-300 text-[11px]">
+                      Allow deeper luxury real estate scenario discussions and strategic questions.
+                    </p>
+                  </div>
+
+                  <div className="p-3 rounded-xl bg-slate-900/70 border border-slate-800">
+                    <div className="font-bold text-purple-300 mb-1 text-[11px]">If Confused / Hesitant</div>
+                    <p className="text-slate-300 text-[11px]">
+                      Simplify questions; break down complex multi-part questions into single steps.
+                    </p>
+                  </div>
+
+                  <div className="p-3 rounded-xl bg-slate-900/70 border border-slate-800">
+                    <div className="font-bold text-amber-300 mb-1 text-[11px]">If Frustrated / Defensive</div>
+                    <p className="text-slate-300 text-[11px]">
+                      Acknowledge concerns warmly; de-escalate and reduce unnecessary qualification probes.
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Ethical & Regulatory Guardrails Audit (Rules 23, 25, 27, 33, 37) */}
+              <div className="p-4 rounded-xl bg-slate-900/50 border border-slate-800 text-xs text-slate-300 space-y-2">
+                <div className="flex items-center gap-2 text-emerald-400 font-bold text-[11px]">
+                  <ShieldCheck className="w-4 h-4" />
+                  <span>Ethical AI Communication Guardrails (Mandatory Verification)</span>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2 text-[11px] text-slate-400 pt-1">
+                  <div className="flex items-center gap-1.5 text-emerald-300/90">
+                    <Check className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                    <span>No personality diagnosis</span>
+                  </div>
+                  <div className="flex items-center gap-1.5 text-emerald-300/90">
+                    <Check className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                    <span>No mental health inference</span>
+                  </div>
+                  <div className="flex items-center gap-1.5 text-emerald-300/90">
+                    <Check className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                    <span>No protected characteristic inferences</span>
+                  </div>
+                  <div className="flex items-center gap-1.5 text-emerald-300/90">
+                    <Check className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                    <span>No intelligence diagnosis</span>
+                  </div>
+                  <div className="flex items-center gap-1.5 text-emerald-300/90">
+                    <Check className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                    <span>Observable verbal evidence required</span>
+                  </div>
+                  <div className="flex items-center gap-1.5 text-emerald-300/90">
+                    <Check className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                    <span>Human-in-the-loop for decisions</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
           {activeTab === 'brief_sim' && (
             <div className="space-y-4">
               <div className="flex items-center justify-between flex-wrap gap-3">
@@ -521,6 +692,35 @@ export const AiHrBrainModal: React.FC<AiHrBrainModalProps> = ({
                       "{nextBrief.suggestedOpeningStatement}"
                     </p>
                   </div>
+
+                  {/* Adaptive Conversation Directives & Observed Behavior */}
+                  {(nextBrief.adaptiveConversationDirectives?.length > 0 || nextBrief.observedBehaviorSummary) && (
+                    <div className="p-3.5 rounded-xl bg-purple-500/10 border border-purple-500/30">
+                      <div className="font-bold text-purple-300 text-xs mb-1.5 flex items-center justify-between">
+                        <div className="flex items-center gap-1.5">
+                          <Sparkles className="w-4 h-4 text-purple-400" />
+                          <span>Behavior-Adaptive Conversation Directives:</span>
+                        </div>
+                        {nextBrief.behaviorTrend && (
+                          <span className="text-[10px] px-2 py-0.5 rounded bg-purple-500/20 text-purple-200 border border-purple-500/30">
+                            Trend: {nextBrief.behaviorTrend}
+                          </span>
+                        )}
+                      </div>
+                      {nextBrief.observedBehaviorSummary && (
+                        <p className="text-slate-300 text-[11px] mb-2 italic">
+                          "{nextBrief.observedBehaviorSummary}"
+                        </p>
+                      )}
+                      {nextBrief.adaptiveConversationDirectives && nextBrief.adaptiveConversationDirectives.length > 0 && (
+                        <ul className="space-y-1 text-slate-200 text-[11px] list-disc list-inside">
+                          {nextBrief.adaptiveConversationDirectives.map((dir, idx) => (
+                            <li key={idx} className="text-purple-200 font-medium">🎯 {dir}</li>
+                          ))}
+                        </ul>
+                      )}
+                    </div>
+                  )}
 
                   {/* Forbidden Repeat Questions Gating */}
                   <div className="p-3.5 rounded-xl bg-rose-500/10 border border-rose-500/30">

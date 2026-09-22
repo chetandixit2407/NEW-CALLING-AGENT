@@ -8,7 +8,10 @@ import {
   LearningProposal,
   HrBrainOverviewStats,
   FactSource,
+  CandidateBehaviorSummary,
+  CandidateMultiCallBehaviorProfile,
 } from '../../src/types';
+import { behaviorAnalyzer } from '../ai/behaviorAnalyzer';
 
 export interface MemoryAuditRecord {
   id: string;
@@ -28,6 +31,7 @@ const DATA_DIR = path.join(process.cwd(), 'data');
 const MEMORY_FILE = path.join(DATA_DIR, 'candidate_memories.json');
 const AUDIT_FILE = path.join(DATA_DIR, 'memory_audit_trail.json');
 const PROPOSALS_FILE = path.join(DATA_DIR, 'learning_proposals.json');
+const BEHAVIOR_FILE = path.join(DATA_DIR, 'candidate_behavior_memory.json');
 
 function ensureDataDir() {
   if (!fs.existsSync(DATA_DIR)) {
@@ -63,6 +67,7 @@ export class MemoryRepository {
   private memories: Map<string, CandidateLongTermMemory> = new Map();
   private auditTrail: MemoryAuditRecord[] = [];
   private learningProposals: LearningProposal[] = [];
+  private behaviorProfiles: Map<string, CandidateMultiCallBehaviorProfile> = new Map();
 
   constructor() {
     this.initialize();
@@ -73,6 +78,9 @@ export class MemoryRepository {
     this.memories = new Map(Object.entries(rawMemories));
     this.auditTrail = loadJsonFile<MemoryAuditRecord[]>(AUDIT_FILE, []);
     this.learningProposals = loadJsonFile<LearningProposal[]>(PROPOSALS_FILE, this.getDefaultProposals());
+    
+    const rawBehavior = loadJsonFile<Record<string, CandidateMultiCallBehaviorProfile>>(BEHAVIOR_FILE, {});
+    this.behaviorProfiles = new Map(Object.entries(rawBehavior));
 
     // Seed default initial memories if empty
     if (this.memories.size === 0) {
@@ -402,6 +410,46 @@ export class MemoryRepository {
     return true;
   }
 
+  public getBehaviorProfile(candidateId: string): CandidateMultiCallBehaviorProfile | null {
+    return this.behaviorProfiles.get(candidateId) || null;
+  }
+
+  public getAllBehaviorProfiles(): CandidateMultiCallBehaviorProfile[] {
+    return Array.from(this.behaviorProfiles.values());
+  }
+
+  public saveBehaviorSummary(
+    candidateId: string,
+    candidateName: string,
+    summary: CandidateBehaviorSummary
+  ): CandidateMultiCallBehaviorProfile {
+    const existing = this.behaviorProfiles.get(candidateId);
+    const summaries = existing ? [...existing.callSummaries, summary] : [summary];
+    
+    const aggregated = behaviorAnalyzer.aggregateMultiCallProfile(candidateId, candidateName, summaries);
+    this.behaviorProfiles.set(candidateId, aggregated);
+    this.persistBehavior();
+    return aggregated;
+  }
+
+  public flagBehaviorHumanReview(candidateId: string, reason: string): boolean {
+    const profile = this.behaviorProfiles.get(candidateId);
+    if (!profile) return false;
+    profile.humanReviewFlagged = true;
+    profile.humanReviewReason = reason;
+    this.persistBehavior();
+    return true;
+  }
+
+  public resolveBehaviorHumanReview(candidateId: string, notes?: string): boolean {
+    const profile = this.behaviorProfiles.get(candidateId);
+    if (!profile) return false;
+    profile.humanReviewFlagged = false;
+    profile.humanReviewReason = undefined;
+    this.persistBehavior();
+    return true;
+  }
+
   public getBrainOverviewStats(): HrBrainOverviewStats {
     let totalFacts = 0;
     let verifiedFacts = 0;
@@ -455,6 +503,7 @@ export class MemoryRepository {
 
     const pendingProposals = this.learningProposals.filter((p) => p.status === 'PENDING_REVIEW').length;
     const approvedProposals = this.learningProposals.filter((p) => p.status === 'APPROVED' || p.status === 'APPLIED').length;
+    const pendingHumanReviews = Array.from(this.behaviorProfiles.values()).filter((p) => p.humanReviewFlagged).length;
 
     return {
       totalLearnedFacts: totalFacts,
@@ -467,6 +516,8 @@ export class MemoryRepository {
       humanFeedbackEntries: this.auditTrail.filter((a) => a.source === 'human_hr_override').length,
       totalCallsProcessed: this.memories.size,
       zeroRepetitionSuccessRate: 0.985,
+      behaviorProfilesCount: this.behaviorProfiles.size,
+      humanReviewPendingCount: pendingHumanReviews,
       systemMemoryLayers: {
         layer1_CurrentConversation: 'Active in-memory call state & turn tracking',
         layer2_CandidateLongTerm: `${this.memories.size} persistent candidate profiles in repository`,
@@ -474,6 +525,7 @@ export class MemoryRepository {
         layer4_CompanyKnowledge: 'White Collar Realty verified facts & M3M Urbana Sector 67 context',
         layer5_RecruitmentLearning: `${this.learningProposals.length} system patterns & question performance logs`,
         layer6_HumanFeedback: `${this.auditTrail.length} audit entries & HR reviewer overrides`,
+        layer7_BehaviorMemory: `${this.behaviorProfiles.size} communication & behavior profiles with evidence timeline`,
       },
     };
   }
@@ -484,6 +536,14 @@ export class MemoryRepository {
       obj[k] = v;
     }
     saveJsonFile(MEMORY_FILE, obj);
+  }
+
+  private persistBehavior() {
+    const obj: Record<string, CandidateMultiCallBehaviorProfile> = {};
+    for (const [k, v] of this.behaviorProfiles.entries()) {
+      obj[k] = v;
+    }
+    saveJsonFile(BEHAVIOR_FILE, obj);
   }
 }
 
