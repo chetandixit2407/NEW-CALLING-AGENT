@@ -241,6 +241,7 @@ export interface JobDescription {
 
 export type QuestionTopic =
   | 'identity_permission'
+  | 'candidate_introduction'
   | 'target_role'
   | 'total_real_estate_experience'
   | 'current_company'
@@ -289,6 +290,19 @@ export interface ContradictionRecord {
   timestamp: string;
 }
 
+export interface ScenarioRecord {
+  scenarioId: string;
+  scenarioType: string;
+  roleTarget: string;
+  difficulty: 'EARLY_CAREER' | 'INTERMEDIATE' | 'SENIOR' | 'LEADERSHIP' | 'SPECIALIST';
+  scenarioQuestion: string;
+  candidateAnswer?: string;
+  followupQuestion?: string;
+  candidateReasoning?: string;
+  competencyTested: string;
+  status: 'PROPOSED' | 'EVALUATED' | 'FOLLOWUP_COMPLETED';
+}
+
 export interface QuestionStateEngine {
   activeQuestionId: string | null;
   activeQuestion: string | null;
@@ -302,4 +316,351 @@ export interface QuestionStateEngine {
   pendingClarifications: string[];
   contradictions: ContradictionRecord[];
 }
+
+export interface AutonomousHrSessionState {
+  conversationState: {
+    stage: 'AGENT_INTRO' | 'ID_CONFIRMED' | 'CANDIDATE_INTRO' | 'DYNAMIC_SCREENING' | 'SCENARIO_EVAL' | 'CROSS_EXAM' | 'COMP_NOTICE' | 'INTERVIEW_SCHEDULING' | 'SUMMARY_CLOSE';
+    activeQuestion: string;
+    activeTopic: string;
+    questionStatus: QuestionLifecycleStatus | string;
+    candidateSpeaking: boolean;
+  };
+  candidateProfile: {
+    experience: {
+      totalYears?: number;
+      realEstateYears?: number;
+      gurgaonYears?: number;
+      dubaiYears?: number;
+    };
+    roles: string[];
+    companies: string[];
+    markets: string[];
+    segments: string[];
+    projects: string[];
+    ticketSizes: string[];
+    performance: {
+      monthlyTarget?: string;
+      achievementRate?: string;
+      highestClosure?: string;
+      runRate?: string;
+    };
+    teamManagement: {
+      teamSize?: number;
+      directReports?: number;
+      personalVsTeamSplit?: string;
+      coachingStrategy?: string;
+    };
+    compensation: {
+      currentSalary?: string;
+      expectedSalary?: string;
+      noticePeriodDays?: number;
+      earliestJoining?: string;
+    };
+    availability: {
+      f2fSlot?: string;
+      venueConfirmed?: boolean;
+    };
+  };
+  questionMemory: {
+    askedQuestions: AskedQuestionRecord[];
+    answeredTopics: string[];
+    openTopics: string[];
+    pendingClarifications: string[];
+  };
+  scenarioMemory: {
+    scenariosUsed: string[];
+    scenarioResults: ScenarioRecord[];
+  };
+}
+
+// ==========================================
+// SELF-LEARNING AI HR BRAIN & MEMORY ARCHITECTURE
+// ==========================================
+
+export type FactSource = 
+  | 'candidate_spoken' 
+  | 'candidate_message' 
+  | 'application_form' 
+  | 'recruiter' 
+  | 'system'
+  | 'human_hr_override';
+
+export interface MemoryFact<T = any> {
+  field: string;
+  value: T;
+  source: FactSource;
+  conversationId?: string;
+  timestamp: string;
+  confidence: number;
+  verified: boolean;
+  lastVerifiedAt?: string;
+  notes?: string;
+  history?: Array<{
+    value: T;
+    source: FactSource;
+    timestamp: string;
+    conversationId?: string;
+    reason?: string;
+  }>;
+}
+
+export interface CandidateMemoryContradiction {
+  id: string;
+  field: string;
+  topic: string;
+  previousValue: string;
+  previousSource: FactSource;
+  previousTimestamp: string;
+  newValue: string;
+  newSource: FactSource;
+  newTimestamp: string;
+  conversationId: string;
+  status: 'PENDING_CLARIFICATION' | 'RESOLVED' | 'DISMISSED';
+  resolvedValue?: string;
+  resolvedAt?: string;
+  resolutionNote?: string;
+}
+
+export interface CandidateCorrectionRecord {
+  id: string;
+  type: 'AI_CORRECTION' | 'CANDIDATE_CORRECTION' | 'RECRUITER_CORRECTION';
+  field: string;
+  previousValue: string;
+  correctValue: string;
+  source: string;
+  conversationId: string;
+  timestamp: string;
+  context?: string;
+}
+
+export interface CandidateSpecificPreference {
+  preferredLanguage?: 'English' | 'Hindi' | 'Hinglish';
+  communicationStyle?: 'concise' | 'detailed' | 'conversational';
+  bestTimeToCall?: string;
+  preferredCallbackWindow?: string;
+  channelPreference?: 'Call' | 'WhatsApp' | 'Email';
+  objectionNotes?: string[];
+  insights?: string[];
+}
+
+export interface CandidateLongTermMemory {
+  candidateId: string;
+  candidateName: string;
+  identity: {
+    name?: MemoryFact<string>;
+    phone?: MemoryFact<string>;
+    email?: MemoryFact<string>;
+    location?: MemoryFact<string>;
+  };
+  experience: {
+    totalYears?: MemoryFact<number>;
+    realEstateYears?: MemoryFact<number>;
+    gurgaonYears?: MemoryFact<number>;
+    dubaiYears?: MemoryFact<number>;
+  };
+  companies: MemoryFact<string[]>;
+  designations: MemoryFact<string[]>;
+  markets: MemoryFact<string[]>;
+  projects: MemoryFact<string[]>;
+  developers: MemoryFact<string[]>;
+  segments: MemoryFact<string[]>;
+  ticketSizes: MemoryFact<string[]>;
+  luxuryExperience: {
+    hasLuxury?: MemoryFact<boolean>;
+    ticketSizesHandled?: MemoryFact<string[]>;
+    hniExposure?: MemoryFact<string>;
+    developersHandled?: MemoryFact<string[]>;
+    primaryVsSecondary?: MemoryFact<string>;
+    closingEvidence?: MemoryFact<string>;
+  };
+  salesPerformance: {
+    highestPersonalClosure?: MemoryFact<string>;
+    monthlyRunRate?: MemoryFact<string>;
+    targetAchievement?: MemoryFact<string>;
+    dealStructureExpertise?: MemoryFact<string>;
+  };
+  teamManagement: {
+    teamSize?: MemoryFact<number>;
+    personalVsTeamSplit?: MemoryFact<string>;
+    reportingSpan?: MemoryFact<string>;
+  };
+  compensation: {
+    currentSalary?: MemoryFact<string>;
+    expectedSalary?: MemoryFact<string>;
+    isDisclosed?: MemoryFact<boolean>;
+  };
+  noticePeriod: {
+    days?: MemoryFact<number>;
+    earliestJoining?: MemoryFact<string>;
+    negotiable?: MemoryFact<boolean>;
+  };
+  interviewAvailability: {
+    agreedSlot?: MemoryFact<string>;
+    venueAcknowledged?: MemoryFact<boolean>;
+    slotId?: MemoryFact<string>;
+  };
+  communicationPreferences: CandidateSpecificPreference;
+  candidateQuestions: Array<{
+    question: string;
+    timestamp: string;
+    conversationId: string;
+    answered: boolean;
+    topicCategory: string;
+  }>;
+  concerns: Array<{
+    concern: string;
+    timestamp: string;
+    conversationId: string;
+    severity: 'Low' | 'Medium' | 'High';
+    addressed: boolean;
+  }>;
+  interests: string[];
+  unresolvedQuestions: string[];
+  contradictions: CandidateMemoryContradiction[];
+  corrections: CandidateCorrectionRecord[];
+  importantStatements: Array<{
+    statement: string;
+    topic: string;
+    timestamp: string;
+    conversationId: string;
+  }>;
+  previousOutcomes: Array<{
+    conversationId: string;
+    outcome: string;
+    timestamp: string;
+    summary: string;
+  }>;
+  candidateSpecificLearnings: string[];
+  nextAction: {
+    action: string;
+    dueDate?: string;
+    owner?: string;
+    suggestedTopic?: string;
+    unresolvedTopic?: string;
+  };
+  lastUpdated: string;
+}
+
+export interface NextCallBrief {
+  candidateId: string;
+  candidateName: string;
+  appliedRole: string;
+  summaryOfPreviousInteractions: string;
+  lastInteractionTimestamp: string;
+  alreadyDiscussedTopics: string[];
+  verifiedInformationSummary: string[];
+  unresolvedTopics: string[];
+  forbiddenRepeatQuestions: string[];
+  candidateConcerns: string[];
+  candidateQuestionsToAddress: string[];
+  communicationPreferences: {
+    language: string;
+    responseStyle: string;
+    preferredTimeWindow?: string;
+  };
+  previousPromises: string[];
+  callbackRequestDetails?: {
+    requestedTime?: string;
+    reason?: string;
+  };
+  interviewState: string;
+  recommendedStartingTopic: string;
+  suggestedOpeningStatement: string;
+  targetScenariosToEvaluate?: string[];
+  contradictionsRequiringClarification: Array<{
+    field: string;
+    previousValue: string;
+    newValue: string;
+    clarificationPrompt: string;
+  }>;
+}
+
+export interface LearningProposal {
+  id: string;
+  type: 'LEARNING_PROPOSAL';
+  pattern: string;
+  evidenceCount: number;
+  evidenceExamples: string[];
+  affectedRoles: string[];
+  category: 'COMPENSATION_OBJECTION' | 'ROLE_CLARITY' | 'PROJECT_INQUIRY' | 'QUESTION_OPTIMIZATION' | 'SCENARIO_REFINEMENT' | 'SCHEDULE_OPTIMIZATION';
+  suggestedChange: string;
+  risk: 'LOW' | 'MEDIUM' | 'HIGH';
+  requiresHumanApproval: boolean;
+  status: 'PENDING_REVIEW' | 'APPROVED' | 'REJECTED' | 'APPLIED';
+  createdAt: string;
+  reviewedBy?: string;
+  reviewedAt?: string;
+  reviewNotes?: string;
+}
+
+export interface HumanFeedbackRecord {
+  id: string;
+  candidateId: string;
+  candidateName: string;
+  conversationId?: string;
+  timestamp: string;
+  reviewerName: string;
+  changeType: 'STATUS_CHANGE' | 'REMARK_OVERRIDE' | 'QUALIFICATION_DECISION' | 'REJECTION_REASON' | 'PRIORITY_UPDATE' | 'ROLE_REALIGNMENT' | 'NEXT_ACTION_MODIFIED';
+  aiRecommendation: {
+    status?: string;
+    qualification?: string;
+    remark?: string;
+    nextAction?: string;
+  };
+  humanDecision: {
+    status?: string;
+    qualification?: string;
+    remark?: string;
+    nextAction?: string;
+    reason: string;
+  };
+  learningGenerated?: string;
+}
+
+export interface QuestionEffectivenessStat {
+  questionId: string;
+  questionText: string;
+  topic: string;
+  roleTarget: string;
+  experienceBracket: string;
+  timesAsked: number;
+  successfulAnswerRate: number; // 0 to 1
+  followUpNeededCount: number;
+  averageAnswerQuality: 'HIGH' | 'MEDIUM' | 'LOW';
+  actionableInsightsYielded: number;
+  effectivenessRating: 'HIGH' | 'MEDIUM' | 'LOW';
+}
+
+export interface ScenarioEffectivenessStat {
+  scenarioId: string;
+  scenarioTitle: string;
+  roleTarget: string;
+  seniorityTier: string;
+  timesPresented: number;
+  averageInformationValue: 'HIGH' | 'MEDIUM' | 'LOW';
+  differentiatesStrongCandidatesRate: number; // 0 to 1
+  recommendedFor: string[];
+}
+
+export interface HrBrainOverviewStats {
+  totalLearnedFacts: number;
+  verifiedFactsCount: number;
+  activeContradictions: number;
+  resolvedContradictions: number;
+  correctionsRecorded: number;
+  learningProposalsPending: number;
+  learningProposalsApproved: number;
+  humanFeedbackEntries: number;
+  totalCallsProcessed: number;
+  zeroRepetitionSuccessRate: number;
+  systemMemoryLayers: {
+    layer1_CurrentConversation: string;
+    layer2_CandidateLongTerm: string;
+    layer3_RoleJdMemory: string;
+    layer4_CompanyKnowledge: string;
+    layer5_RecruitmentLearning: string;
+    layer6_HumanFeedback: string;
+  };
+}
+
 

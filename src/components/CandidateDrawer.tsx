@@ -1,11 +1,12 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   X, Phone, Mail, Building, Briefcase, Award, DollarSign, 
   MapPin, Clock, Calendar, CheckCircle2, AlertTriangle, 
   ChevronRight, MessageSquare, Play, Sparkles, UserCheck,
-  Bell, ShieldAlert, History, Tag
+  Bell, ShieldAlert, History, Tag, Brain, ShieldCheck, Target,
+  Check
 } from 'lucide-react';
-import { Candidate, CallRecord } from '../types';
+import { Candidate, CallRecord, CandidateLongTermMemory, NextCallBrief } from '../types';
 
 interface CandidateDrawerProps {
   candidate: Candidate | null;
@@ -25,6 +26,22 @@ export const CandidateDrawer: React.FC<CandidateDrawerProps> = ({
   onOpenWhatsApp,
 }) => {
   const [selectedCall, setSelectedCall] = useState<CallRecord | null>(null);
+  const [candidateMemory, setCandidateMemory] = useState<CandidateLongTermMemory | null>(null);
+  const [showBrainMemory, setShowBrainMemory] = useState<boolean>(true);
+
+  useEffect(() => {
+    if (candidate?.id) {
+      fetch(`/api/brain/candidate-memory/${candidate.id}`)
+        .then((r) => {
+          if (r.ok) return r.json();
+          return null;
+        })
+        .then((mem) => {
+          if (mem) setCandidateMemory(mem);
+        })
+        .catch(() => {});
+    }
+  }, [candidate?.id]);
 
   if (!candidate) return null;
 
@@ -462,6 +479,105 @@ export const CandidateDrawer: React.FC<CandidateDrawerProps> = ({
               </div>
             </div>
           )}
+
+          {/* AI HR Brain Persistent Memory Card (Rule 1, 4, 5, 9) */}
+          <div className="p-4 rounded-xl bg-gradient-to-br from-[#0c1424] via-slate-900 to-[#0b1220] border border-amber-500/25 shadow-md">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-800/80">
+              <div className="flex items-center gap-2">
+                <div className="p-1.5 rounded-lg bg-amber-500/10 text-amber-400 border border-amber-500/30">
+                  <Brain className="w-4 h-4" />
+                </div>
+                <div>
+                  <h4 className="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-1.5">
+                    <span>Central AI HR Brain Memory</span>
+                    <span className="px-1.5 py-0.2 rounded text-[9px] bg-emerald-500/20 text-emerald-300 font-normal">
+                      Persistent
+                    </span>
+                  </h4>
+                  <p className="text-[10px] text-slate-400">
+                    Source provenance & zero-repetition verified attributes
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowBrainMemory(!showBrainMemory)}
+                className="text-[11px] text-amber-400 hover:text-amber-300 font-semibold"
+              >
+                {showBrainMemory ? 'Hide Details' : 'Show Details'}
+              </button>
+            </div>
+
+            {showBrainMemory && (
+              <div className="mt-3 space-y-3 text-xs">
+                {/* Verified Attributes Grid */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[11px]">
+                  <div className="p-2.5 rounded-lg bg-slate-950/60 border border-slate-800">
+                    <div className="text-slate-400 text-[10px]">Total Real Estate Exp</div>
+                    <div className="text-white font-semibold mt-0.5 flex items-center justify-between">
+                      <span>{candidateMemory?.experience?.totalYears?.value || candidate.screening.totalExperienceYears || 'Pending'} Yrs</span>
+                      <span className="text-[9px] px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                        {candidateMemory?.experience?.totalYears?.source || 'verified'}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="p-2.5 rounded-lg bg-slate-950/60 border border-slate-800">
+                    <div className="text-slate-400 text-[10px]">Highest Personal Closure</div>
+                    <div className="text-amber-300 font-semibold mt-0.5 flex items-center justify-between">
+                      <span>{candidateMemory?.salesPerformance?.highestPersonalClosure?.value || 'Pending call'}</span>
+                      <span className="text-[9px] px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-400 border border-amber-500/20">
+                        {candidateMemory?.salesPerformance?.highestPersonalClosure?.source || 'candidate'}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="p-2.5 rounded-lg bg-slate-950/60 border border-slate-800">
+                    <div className="text-slate-400 text-[10px]">Current & Expected CTC</div>
+                    <div className="text-white font-semibold mt-0.5">
+                      {candidateMemory?.compensation?.currentSalary?.value || candidate.screening.currentSalaryLPA || 'Undisclosed'} → {candidateMemory?.compensation?.expectedSalary?.value || candidate.screening.expectedSalaryLPA || 'TBD'}
+                    </div>
+                  </div>
+
+                  <div className="p-2.5 rounded-lg bg-slate-950/60 border border-slate-800">
+                    <div className="text-slate-400 text-[10px]">Notice Period</div>
+                    <div className="text-white font-semibold mt-0.5">
+                      {candidateMemory?.noticePeriod?.days?.value !== undefined ? `${candidateMemory.noticePeriod.days.value} Days` : candidate.screening.noticePeriodDays !== undefined ? `${candidate.screening.noticePeriodDays} Days` : '15-30 Days'}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Candidate Specific Learnings */}
+                {candidateMemory?.candidateSpecificLearnings && candidateMemory.candidateSpecificLearnings.length > 0 && (
+                  <div className="p-2.5 rounded-lg bg-purple-950/20 border border-purple-500/20 text-[11px] text-purple-200">
+                    <div className="font-bold text-purple-300 mb-1 flex items-center gap-1">
+                      <Sparkles className="w-3 h-3 text-purple-400" />
+                      <span>Learned Candidate Preferences & Context:</span>
+                    </div>
+                    <ul className="list-disc list-inside space-y-0.5 text-slate-300">
+                      {candidateMemory.candidateSpecificLearnings.map((l, i) => (
+                        <li key={i}>{l}</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+
+                {/* Contradictions & Corrections Banner */}
+                {candidateMemory?.contradictions && candidateMemory.contradictions.filter(c => c.status === 'PENDING_CLARIFICATION').length > 0 && (
+                  <div className="p-2.5 rounded-lg bg-rose-950/30 border border-rose-500/40 text-[11px] text-rose-200">
+                    <div className="font-bold text-rose-300 mb-1 flex items-center gap-1">
+                      <AlertTriangle className="w-3 h-3 text-rose-400" />
+                      <span>Pending Memory Contradiction (Rule 5):</span>
+                    </div>
+                    {candidateMemory.contradictions.filter(c => c.status === 'PENDING_CLARIFICATION').map((c, i) => (
+                      <div key={i} className="text-slate-300 mt-1">
+                        • {c.topic}: Previously reported <span className="text-amber-300 font-semibold">{c.previousValue}</span> vs new statement <span className="text-rose-300 font-semibold">{c.newValue}</span>. Requires gentle clarification.
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
 
           {/* Call Logs & Transcripts */}
           <div>

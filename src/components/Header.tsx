@@ -1,5 +1,5 @@
 import React from 'react';
-import { PhoneCall, PhoneOff, Building2, Globe, Plus, RefreshCw } from 'lucide-react';
+import { PhoneCall, PhoneOff, Building2, Globe, Plus, RefreshCw, Brain } from 'lucide-react';
 import { Candidate } from '../types';
 import { VapiCallStatus } from '../utils/vapiService';
 
@@ -8,6 +8,7 @@ interface HeaderProps {
   onQuickStartCall: () => void;
   onStartInteractiveCall?: () => void;
   onEndCall?: () => void;
+  onOpenBrainModal?: () => void;
   vapiCallStatus?: VapiCallStatus;
   activeCandidateCount: number;
 }
@@ -17,6 +18,7 @@ export const Header: React.FC<HeaderProps> = ({
   onQuickStartCall,
   onStartInteractiveCall,
   onEndCall,
+  onOpenBrainModal,
   vapiCallStatus = 'idle',
   activeCandidateCount,
 }) => {
@@ -55,6 +57,18 @@ export const Header: React.FC<HeaderProps> = ({
               <Globe className="w-3.5 h-3.5 mr-1.5 text-amber-400" />
               <span>Languages: <strong className="text-slate-200">Hindi, English, Hinglish</strong></span>
             </div>
+
+            {onOpenBrainModal && (
+              <button
+                id="btn-open-ai-brain"
+                onClick={onOpenBrainModal}
+                className="inline-flex items-center gap-1.5 text-xs font-bold bg-amber-500/15 hover:bg-amber-500/25 text-amber-300 border border-amber-500/40 px-3 py-2 rounded-lg transition shadow-xs"
+                title="Open Central AI HR Brain - 6 Memory Layers & Self-Learning System"
+              >
+                <Brain className="w-3.5 h-3.5 text-amber-400 animate-pulse" />
+                <span>AI HR Brain</span>
+              </button>
+            )}
 
             <button
               id="btn-add-dummy-candidate"

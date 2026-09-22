@@ -29,6 +29,7 @@ export const TOPIC_SEMANTIC_PATTERNS: Record<
       'is this a good time to speak',
       'regarding your application',
       'calling from white collar realty',
+      'hi, am i speaking with',
     ],
     priorityOrder: 1,
     extractFacts: (text) => {
@@ -37,6 +38,94 @@ export const TOPIC_SEMANTIC_PATTERNS: Record<
         return { identityConfirmed: true, permissionGranted: true };
       }
       return {};
+    },
+  },
+  candidate_introduction: {
+    label: 'Candidate Introduction & Background Walkthrough',
+    description: 'Candidate self-introduction covering experience, current role, market, developers, ticket sizes, and targets',
+    samplePhrases: [
+      'walk me through your experience and what you\'re currently handling',
+      'give me a quick introduction about yourself and your real-estate experience',
+      'briefly introduce yourself and tell me what kind of real-estate sales you\'ve been handling',
+      'tell me about your background in real estate',
+      'walk me through your background',
+    ],
+    priorityOrder: 2,
+    extractFacts: (text, currentFacts) => {
+      const lower = text.toLowerCase();
+      const extracted: Record<string, any> = { candidateIntroGiven: true };
+
+      // Experience parsing
+      const expMatch = lower.match(/(\d+(?:\.\d+)?)\s*(?:years?|yrs?)/);
+      if (expMatch) {
+        extracted.totalExperienceYears = parseFloat(expMatch[1]);
+        extracted.realEstateExperienceYears = parseFloat(expMatch[1]);
+      }
+
+      // Company detection
+      const companies = ['dlf', 'm3m', 'square yards', 'anarock', 'godrej', 'emaar', 'sobha', 'proptiger', 'signature global', 'adani', 'trump tower', 'central park', 'smartworld', 'elan', 'tarc', 'whiteland', 'conscient'];
+      for (const comp of companies) {
+        if (lower.includes(comp)) {
+          extracted.currentCompany = comp.toUpperCase();
+          break;
+        }
+      }
+
+      // Designation detection
+      const desigs = ['senior sales executive', 'sales manager', 'team lead', 'associate director', 'property consultant', 'senior consultant', 'pre-sales executive', 'relationship manager', 'closing manager', 'business development executive', 'bde'];
+      for (const d of desigs) {
+        if (lower.includes(d)) {
+          extracted.currentDesignation = d.split(' ').map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+          break;
+        }
+      }
+
+      // Market detection
+      const markets: string[] = [];
+      if (lower.includes('gurgaon') || lower.includes('gurugram')) markets.push('Gurugram');
+      if (lower.includes('golf course road') || lower.includes('golf course extension')) markets.push('Golf Course Rd / Ext');
+      if (lower.includes('spr') || lower.includes('southern peripheral')) markets.push('SPR');
+      if (lower.includes('dwarka expressway')) markets.push('Dwarka Expressway');
+      if (lower.includes('new gurgaon') || lower.includes('new gurugram')) markets.push('New Gurugram');
+      if (lower.includes('dubai')) markets.push('Dubai');
+      if (markets.length > 0) {
+        extracted.markets = markets;
+        if (markets.some((m) => m.includes('Gurugram') || m.includes('Golf') || m.includes('SPR') || m.includes('Dwarka'))) {
+          extracted.gurgaonExperience = true;
+        }
+        if (markets.includes('Dubai')) {
+          extracted.dubaiExperience = true;
+        }
+      }
+
+      // Segments
+      const segments: string[] = [];
+      if (lower.includes('ultra-luxury') || lower.includes('ultra luxury')) segments.push('Ultra-Luxury Residential');
+      else if (lower.includes('luxury')) segments.push('Luxury Residential');
+      else if (lower.includes('residential')) segments.push('Residential');
+      if (lower.includes('commercial')) segments.push('Commercial');
+      if (lower.includes('primary')) segments.push('Primary Sales');
+      if (lower.includes('secondary') || lower.includes('resale')) segments.push('Secondary / Resale');
+      if (segments.length > 0) extracted.segments = segments;
+
+      // Ticket size detection
+      const ticketMatch = lower.match(/(\d+(?:\.\d+)?)\s*(?:to|-)\s*(\d+(?:\.\d+)?)\s*(?:cr|crore|crores)/);
+      if (ticketMatch) {
+        extracted.luxuryTicketSize = `₹${ticketMatch[1]} - ₹${ticketMatch[2]} Cr`;
+      } else {
+        const singleCr = lower.match(/(\d+(?:\.\d+)?)\s*(?:cr|crore|crores)/);
+        if (singleCr) {
+          extracted.luxuryTicketSize = `₹${singleCr[1]} Cr`;
+        }
+      }
+
+      // Team size detection
+      const teamMatch = lower.match(/team of\s*(\d+)/) || lower.match(/(\d+)\s*(?:people|members|consultants)\s*team/);
+      if (teamMatch) {
+        extracted.teamSize = parseInt(teamMatch[1], 10);
+      }
+
+      return extracted;
     },
   },
   target_role: {
@@ -805,3 +894,508 @@ export function getNextPriorityOpenTopic(state: QuestionStateEngine): QuestionTo
 
   return null;
 }
+
+/**
+ * =======================================================================
+ * AUTONOMOUS REAL ESTATE SCENARIO ENGINE & REPERTOIRE
+ * =======================================================================
+ */
+
+export interface ScenarioDefinition {
+  id: string;
+  category:
+    | 'EARLY_CAREER'
+    | 'MID_SALES'
+    | 'SENIOR_SALES'
+    | 'LUXURY_SALES'
+    | 'PRIMARY_SALES'
+    | 'SECONDARY_SALES'
+    | 'PRE_SALES'
+    | 'BDE'
+    | 'SALES_MANAGER'
+    | 'CLOSING_MANAGER'
+    | 'GURUGRAM_MICRO_MARKET'
+    | 'DUBAI_MARKET';
+  minExp: number;
+  maxExp?: number;
+  roleTargets: string[];
+  competencyTested: string;
+  initialQuestion: string;
+  followUpBranching: {
+    condition: string;
+    followUpQuestion: string;
+  }[];
+}
+
+export const SCENARIO_CATALOG: ScenarioDefinition[] = [
+  // 1. EARLY CAREER (0–2 Years)
+  {
+    id: 'SC_EARLY_A_NEW_LEAD_PRICE',
+    category: 'EARLY_CAREER',
+    minExp: 0,
+    maxExp: 2,
+    roleTargets: ['Sales Executive', 'Associate Property Consultant', 'Junior Sales'],
+    competencyTested: 'Lead Qualification & Value-First Consultation',
+    initialQuestion:
+      'You receive a fresh lead for a luxury residential project, but the customer immediately says, "Send me the price and floor plan on WhatsApp." How would you handle that conversation?',
+    followUpBranching: [
+      {
+        condition: 'sends price immediately',
+        followUpQuestion: 'What would you ask before sending the price to ensure the customer doesn\'t immediately drop off?',
+      },
+      {
+        condition: 'asks questions first',
+        followUpQuestion: 'What would you do if the customer insists and refuses to share their budget or requirement over the phone?',
+      },
+    ],
+  },
+  {
+    id: 'SC_EARLY_B_NO_RESPONSE',
+    category: 'EARLY_CAREER',
+    minExp: 0,
+    maxExp: 2,
+    roleTargets: ['Sales Executive', 'Associate Property Consultant', 'Junior Sales'],
+    competencyTested: 'Follow-up Cadence & Persistence',
+    initialQuestion:
+      'You spoke to a prospective buyer once and they showed strong interest, but now they are not responding to calls or WhatsApp. What would be your follow-up strategy?',
+    followUpBranching: [
+      {
+        condition: 'general follow up',
+        followUpQuestion: 'How many times would you follow up before changing your communication channel or messaging angle?',
+      },
+    ],
+  },
+  {
+    id: 'SC_EARLY_C_SITE_VISIT_CANCEL',
+    category: 'EARLY_CAREER',
+    minExp: 0,
+    maxExp: 2,
+    roleTargets: ['Sales Executive', 'Associate Property Consultant', 'Junior Sales'],
+    competencyTested: 'Site Visit Rescheduling & Commitment Testing',
+    initialQuestion:
+      'A customer agreed to a site visit for a luxury residence but cancels two hours before the scheduled appointment. How would you handle the call?',
+    followUpBranching: [
+      {
+        condition: 'reschedule attempt',
+        followUpQuestion: 'How would you identify whether the cancellation is a genuine emergency or if the buyer has lost interest?',
+      },
+    ],
+  },
+  {
+    id: 'SC_EARLY_D_PRICE_OBJECTION',
+    category: 'EARLY_CAREER',
+    minExp: 0,
+    maxExp: 2,
+    roleTargets: ['Sales Executive', 'Associate Property Consultant', 'Junior Sales'],
+    competencyTested: 'Price Objection Handling vs Nearby Cheaper Options',
+    initialQuestion:
+      'A customer says, "Your project is too expensive. I can get something cheaper nearby." How would you respond?',
+    followUpBranching: [
+      {
+        condition: 'explains value',
+        followUpQuestion: 'How would you identify whether budget is actually their constraint versus a negotiation tactic?',
+      },
+    ],
+  },
+
+  // 2. MID-LEVEL SALES (2–5 Years)
+  {
+    id: 'SC_MID_A_LEAD_PRIORITIZATION',
+    category: 'MID_SALES',
+    minExp: 2,
+    maxExp: 5,
+    roleTargets: ['Senior Sales Executive', 'Property Consultant', 'Senior Consultant'],
+    competencyTested: 'Lead Pipeline Prioritization & Buying Signals',
+    initialQuestion:
+      'You have 20 active leads in your pipeline, but only three are showing clear buying signals. How do you prioritize your time across the day?',
+    followUpBranching: [
+      {
+        condition: 'pipeline allocation',
+        followUpQuestion: 'What specific signals make you classify an HNI lead as high priority versus nurturing?',
+      },
+    ],
+  },
+  {
+    id: 'SC_MID_B_HNI_NON_SALESY',
+    category: 'MID_SALES',
+    minExp: 2,
+    maxExp: 5,
+    roleTargets: ['Senior Sales Executive', 'Property Consultant', 'Senior Consultant'],
+    competencyTested: 'Consultative Approach with Sophisticated HNI Buyers',
+    initialQuestion:
+      'You receive a lead from an HNI buyer looking at a luxury residence. They are knowledgeable about Gurgaon developers and don\'t want a standard sales pitch. How would you structure your first interaction?',
+    followUpBranching: [
+      {
+        condition: 'consultative opening',
+        followUpQuestion: 'What essential questions would you ask before presenting any specific property options?',
+      },
+    ],
+  },
+  {
+    id: 'SC_MID_C_DISCOUNT_NEGOTIATION',
+    category: 'MID_SALES',
+    minExp: 2,
+    maxExp: 5,
+    roleTargets: ['Senior Sales Executive', 'Property Consultant', 'Senior Consultant'],
+    competencyTested: 'Discount Negotiation & Margin Defense',
+    initialQuestion:
+      'A buyer loves the property but insists they will only book if they get a significant direct discount. How would you handle this negotiation without devaluing the asset?',
+    followUpBranching: [
+      {
+        condition: 'discount handling',
+        followUpQuestion: 'At what exact point would you involve your Sales Manager or Developer Relationship team?',
+      },
+    ],
+  },
+  {
+    id: 'SC_MID_D_SITE_VISIT_THINK_ABOUT_IT',
+    category: 'MID_SALES',
+    minExp: 2,
+    maxExp: 5,
+    roleTargets: ['Senior Sales Executive', 'Property Consultant', 'Senior Consultant'],
+    competencyTested: 'Post-Site Visit Conversion & Overcoming Stalls',
+    initialQuestion:
+      'You conducted a successful site visit. The customer clearly liked the property but ends by saying, "I will think about it and let you know." What is your immediate next step?',
+    followUpBranching: [
+      {
+        condition: 'post visit follow up',
+        followUpQuestion: 'What underlying hesitation would you try to uncover before scheduling your next follow-up call?',
+      },
+    ],
+  },
+  {
+    id: 'SC_MID_E_SELF_GENERATION',
+    category: 'MID_SALES',
+    minExp: 2,
+    maxExp: 5,
+    roleTargets: ['Senior Sales Executive', 'Property Consultant'],
+    competencyTested: 'Self-Generated Pipeline & Referral Acquisition',
+    initialQuestion:
+      'Suppose digital inbound leads are slow for a month. How do you generate your own high-ticket buyer opportunities?',
+    followUpBranching: [
+      {
+        condition: 'organic sourcing',
+        followUpQuestion: 'Which specific channels—such as HNI referrals, corporate tie-ups, or channel partners—have actually yielded closures for you in the past?',
+      },
+    ],
+  },
+
+  // 3. SENIOR SALES (5+ Years)
+  {
+    id: 'SC_SNR_A_HIGH_TICKET_CLOSURE_DELAY',
+    category: 'SENIOR_SALES',
+    minExp: 5,
+    roleTargets: ['Senior Sales Executive', 'Team Lead', 'Senior Property Consultant', 'Assistant Manager'],
+    competencyTested: 'High-Ticket Closing Momentum & Deal Urgency',
+    initialQuestion:
+      'You have a serious HNI buyer interested in a ₹5 Cr+ luxury residence. They like the property but are delaying the final signing. How do you move the deal forward without sounding desperate or pushy?',
+    followUpBranching: [
+      {
+        condition: 'urgency creation',
+        followUpQuestion: 'What specific indicators tell you that the client is genuinely ready to close versus keeping their options open?',
+      },
+    ],
+  },
+  {
+    id: 'SC_SNR_B_UNAUTHORIZED_DISCOUNT_PRESSURE',
+    category: 'SENIOR_SALES',
+    minExp: 5,
+    roleTargets: ['Senior Sales Executive', 'Team Lead', 'Senior Consultant'],
+    competencyTested: 'Complex Negotiation & Deal Protection',
+    initialQuestion:
+      'A buyer demands a large discount that exceeds your authorized slab and threatens to walk away immediately. How do you protect the deal without making an unauthorized commitment?',
+    followUpBranching: [
+      {
+        condition: 'deal protection',
+        followUpQuestion: 'What alternative value additions or payment structuring would you offer instead of pure price cuts?',
+      },
+    ],
+  },
+  {
+    id: 'SC_SNR_C_MULTIPLE_FAMILY_DECISION_MAKERS',
+    category: 'SENIOR_SALES',
+    minExp: 5,
+    roleTargets: ['Senior Sales Executive', 'Team Lead', 'Manager'],
+    competencyTested: 'Multi-Stakeholder Consensus Management',
+    initialQuestion:
+      'You are presenting a luxury apartment to a family where the buyer, spouse, and parents have conflicting layout and location preferences. How do you manage the discussion to build consensus?',
+    followUpBranching: [
+      {
+        condition: 'consensus management',
+        followUpQuestion: 'Whose concerns do you prioritize first, and how do you align the primary financial decision maker?',
+      },
+    ],
+  },
+
+  // 4. LUXURY & ULTRA-LUXURY SPECIALIZATION
+  {
+    id: 'SC_LUX_A_HNI_MARKET_CREDIBILITY',
+    category: 'LUXURY_SALES',
+    minExp: 3,
+    roleTargets: ['Luxury Sales Consultant', 'Senior Sales Executive', 'Sales Manager'],
+    competencyTested: 'Gurugram Luxury Market Authority & Micro-Market Analysis',
+    initialQuestion:
+      'You are meeting an ultra-HNI client who knows the Gurugram luxury market intimately and is actively comparing DLF, M3M, and Oberoi. How do you establish authority and trust in the first 10 minutes?',
+    followUpBranching: [
+      {
+        condition: 'authority building',
+        followUpQuestion: 'What specific comparative parameters—such as density, loading, construction quality, or rental yield—do you focus on?',
+      },
+    ],
+  },
+  {
+    id: 'SC_LUX_B_UHNI_PRIVACY',
+    category: 'LUXURY_SALES',
+    minExp: 3,
+    roleTargets: ['Luxury Sales Consultant', 'Senior Consultant'],
+    competencyTested: 'UHNI Relationship Discretion & Communication Cadence',
+    initialQuestion:
+      'A high-profile UHNI client values utmost privacy and explicitly states they do not appreciate frequent phone calls or marketing broadcasts. How do you nurture this relationship effectively?',
+    followUpBranching: [
+      {
+        condition: 'discrete communication',
+        followUpQuestion: 'How do you keep them informed about exclusive off-market releases without being intrusive?',
+      },
+    ],
+  },
+  {
+    id: 'SC_LUX_C_PREMIUM_JUSTIFICATION',
+    category: 'LUXURY_SALES',
+    minExp: 3,
+    roleTargets: ['Luxury Sales Consultant', 'Senior Sales Executive'],
+    competencyTested: 'Premium Pricing Justification & Architectural Value Selling',
+    initialQuestion:
+      'You are pitching an ultra-luxury residence priced at ₹25,000+ per sq ft. The buyer likes the specifications but questions why they should pay a 30% premium over adjacent developments. How do you explain the premium?',
+    followUpBranching: [
+      {
+        condition: 'premium justification',
+        followUpQuestion: 'What specific tangible factors—such as floor-to-ceiling height, low density per acre, or club amenities—would you highlight?',
+      },
+    ],
+  },
+
+  // 5. SALES MANAGER & TEAM LEADERSHIP (5–10 Years)
+  {
+    id: 'SC_MGR_A_TARGET_DEFICIT_1_WEEK',
+    category: 'SALES_MANAGER',
+    minExp: 5,
+    roleTargets: ['Sales Manager', 'Team Lead', 'Senior Sales Manager', 'Associate Director'],
+    competencyTested: 'Crisis Pipeline Recovery & Revenue Acceleration',
+    initialQuestion:
+      'Your sales team is running 30% behind monthly gross target with only seven days left in the month. What is your action plan starting tomorrow morning?',
+    followUpBranching: [
+      {
+        condition: 'target recovery',
+        followUpQuestion: 'How would you diagnose whether the root bottleneck is lead volume, poor site-visit conversion, or stalled closing negotiations?',
+      },
+    ],
+  },
+  {
+    id: 'SC_MGR_B_HIGH_PERFORMER_POOR_DISCIPLINE',
+    category: 'SALES_MANAGER',
+    minExp: 5,
+    roleTargets: ['Sales Manager', 'Team Lead'],
+    competencyTested: 'High-Performer Governance & CRM Compliance',
+    initialQuestion:
+      'Your top sales producer delivers 40% of the team revenue but refuses to log leads in the CRM, ignores morning huddles, and creates friction with peers. How do you address this?',
+    followUpBranching: [
+      {
+        condition: 'performer management',
+        followUpQuestion: 'If they threaten to resign and take their pipeline with them when confronted, how do you protect the company\'s interests?',
+      },
+    ],
+  },
+  {
+    id: 'SC_MGR_C_UNDERPERFORMER_COACHING',
+    category: 'SALES_MANAGER',
+    minExp: 5,
+    roleTargets: ['Sales Manager', 'Team Lead'],
+    competencyTested: 'Performance Improvement & Diagnostic Coaching',
+    initialQuestion:
+      'A sales consultant has missed target for three consecutive months despite having good energy. How do you diagnose and turn around their performance?',
+    followUpBranching: [
+      {
+        condition: 'coaching diagnostic',
+        followUpQuestion: 'How do you determine if the problem is lead qualification, phone presentation, or objection handling at the site visit stage?',
+      },
+    ],
+  },
+  {
+    id: 'SC_MGR_D_LEAD_CONFLICT',
+    category: 'SALES_MANAGER',
+    minExp: 5,
+    roleTargets: ['Sales Manager', 'Team Lead'],
+    competencyTested: 'Conflict Resolution & Transparent Governance',
+    initialQuestion:
+      'Two senior property consultants in your team are fiercely disputing credit and commission for a ₹7 Cr luxury booking. How do you investigate and resolve this dispute?',
+    followUpBranching: [
+      {
+        condition: 'dispute investigation',
+        followUpQuestion: 'What CRM activity logs and client touchpoint records do you review before announcing your final verdict?',
+      },
+    ],
+  },
+
+  // 6. PRE-SALES SPECIALIZATION
+  {
+    id: 'SC_PRE_A_2MIN_QUALIFICATION',
+    category: 'PRE_SALES',
+    minExp: 0,
+    roleTargets: ['Pre-Sales Executive', 'Tele-Sales Consultant', 'Lead Generation Specialist'],
+    competencyTested: 'Rapid BANT/CHAMP Lead Qualification in Limited Time',
+    initialQuestion:
+      'You connect with a high-intent lead for a Golf Course Extension luxury project, but the client says, "I have exactly two minutes before boarding a flight." How do you qualify them efficiently?',
+    followUpBranching: [
+      {
+        condition: 'rapid qualification',
+        followUpQuestion: 'What are the top 3 critical data points you must capture before confirming a weekend site visit?',
+      },
+    ],
+  },
+  {
+    id: 'SC_PRE_B_TECHNICAL_UNKNOWN',
+    category: 'PRE_SALES',
+    minExp: 0,
+    roleTargets: ['Pre-Sales Executive', 'Tele-Sales Consultant'],
+    competencyTested: 'Accuracy, Trust, & Escalation Discipline (No Guessing)',
+    initialQuestion:
+      'A prospect asks a highly technical query regarding RERA approval clauses, setback approvals, or load-bearing wall specifications that you are not sure about. How do you respond on the call?',
+    followUpBranching: [
+      {
+        condition: 'escalation and verification',
+        followUpQuestion: 'Why is it critical in luxury real estate never to guess technical or legal specifications over the phone?',
+      },
+    ],
+  },
+
+  // 7. BUSINESS DEVELOPMENT / BROKER NETWORKING (BDE)
+  {
+    id: 'SC_BDE_A_NEW_MICROMARKET_30DAYS',
+    category: 'BDE',
+    minExp: 2,
+    roleTargets: ['Business Development Executive', 'BDE', 'Channel Partner Manager'],
+    competencyTested: '30-Day Channel Activation & CP Sourcing',
+    initialQuestion:
+      'Suppose White Collar Realty assigns you to drive residential business in a new Gurugram micro-market where you have zero existing contacts. What is your roadmap for the first 30 days?',
+    followUpBranching: [
+      {
+        condition: 'channel roadmap',
+        followUpQuestion: 'How do you identify and shortlist tier-1 active channel partners versus dormant brokers?',
+      },
+    ],
+  },
+  {
+    id: 'SC_BDE_B_CHANNEL_CONFLICT',
+    category: 'BDE',
+    minExp: 2,
+    roleTargets: ['Business Development Executive', 'BDE', 'Channel Partner Manager'],
+    competencyTested: 'Channel Harmony & Broker Sourcing Protection',
+    initialQuestion:
+      'A key channel partner claims a client walk-in belongs to their agency, while your direct sales team claims it was an organic direct walk-in. How do you resolve this without alienating the broker?',
+    followUpBranching: [
+      {
+        condition: 'channel harmony',
+        followUpQuestion: 'What documentation or digital lead registration protocol do you establish to prevent recurring disputes?',
+      },
+    ],
+  },
+
+  // 8. GURUGRAM & DUBAI MICRO-MARKET DEPTH
+  {
+    id: 'SC_MKT_GURUGRAM_COMPARISON',
+    category: 'GURUGRAM_MICRO_MARKET',
+    minExp: 2,
+    roleTargets: ['Sales Executive', 'Senior Sales Executive', 'Sales Manager'],
+    competencyTested: 'Golf Course Ext Rd vs New Gurugram Client Advisory',
+    initialQuestion:
+      'A luxury homebuyer with a ₹4.5 Cr budget is torn between an established address on Golf Course Extension Road versus an upcoming high-end project in New Gurugram / SPR. How do you help them evaluate the pros and cons?',
+    followUpBranching: [
+      {
+        condition: 'market comparison',
+        followUpQuestion: 'What key parameters—such as connectivity, infrastructure completion timeline, and social amenities—do you walk them through?',
+      },
+    ],
+  },
+  {
+    id: 'SC_MKT_DUBAI_NRI_COMPARISON',
+    category: 'DUBAI_MARKET',
+    minExp: 2,
+    roleTargets: ['Sales Executive', 'Senior Sales Executive', 'International Property Consultant'],
+    competencyTested: 'Dubai Freehold vs Gurugram Luxury Investment Advisory',
+    initialQuestion:
+      'An NRI investor is evaluating whether to invest ₹5 Cr in Dubai off-plan (e.g., Dubai Hills / Downtown) or in a premium Gurugram residential high-rise. How do you structure that advisory conversation?',
+    followUpBranching: [
+      {
+        condition: 'international comparison',
+        followUpQuestion: 'How do you compare factors like rental yields, tax advantages, capital appreciation cycles, and repatriation rules?',
+      },
+    ],
+  },
+];
+
+/**
+ * Dynamically selects the most appropriate scenario based on candidate profile and history.
+ */
+export function selectNextScenario(
+  candidateRole: string,
+  experienceYears: number,
+  claimedMarkets: string[],
+  usedScenarioIds: string[]
+): ScenarioDefinition | null {
+  const unusedScenarios = SCENARIO_CATALOG.filter((s) => !usedScenarioIds.includes(s.id));
+  if (unusedScenarios.length === 0) return null;
+
+  const roleLower = (candidateRole || '').toLowerCase();
+
+  // 1. Manager / Team Lead
+  if (roleLower.includes('manager') || roleLower.includes('lead') || roleLower.includes('director')) {
+    const mgr = unusedScenarios.find((s) => s.category === 'SALES_MANAGER');
+    if (mgr) return mgr;
+  }
+
+  // 2. Pre-sales
+  if (roleLower.includes('pre-sales') || roleLower.includes('tele')) {
+    const pre = unusedScenarios.find((s) => s.category === 'PRE_SALES');
+    if (pre) return pre;
+  }
+
+  // 3. BDE / Channel Partners
+  if (roleLower.includes('bde') || roleLower.includes('business development') || roleLower.includes('channel')) {
+    const bde = unusedScenarios.find((s) => s.category === 'BDE');
+    if (bde) return bde;
+  }
+
+  // 4. Dubai claimed exposure
+  if (claimedMarkets.some((m) => m.toLowerCase().includes('dubai'))) {
+    const dubai = unusedScenarios.find((s) => s.category === 'DUBAI_MARKET');
+    if (dubai) return dubai;
+  }
+
+  // 5. Gurugram micro-market scenario for experienced sales consultants
+  if (experienceYears >= 3 && claimedMarkets.some((m) => m.toLowerCase().includes('gurgaon') || m.toLowerCase().includes('gurugram'))) {
+    const mkt = unusedScenarios.find((s) => s.category === 'GURUGRAM_MICRO_MARKET');
+    if (mkt) return mkt;
+  }
+
+  // 6. Luxury / Ultra-luxury for senior / luxury candidates
+  if (experienceYears >= 4 || roleLower.includes('luxury') || roleLower.includes('senior')) {
+    const lux = unusedScenarios.find((s) => s.category === 'LUXURY_SALES');
+    if (lux) return lux;
+    const snr = unusedScenarios.find((s) => s.category === 'SENIOR_SALES');
+    if (snr) return snr;
+  }
+
+  // 7. Mid sales (2–5 years)
+  if (experienceYears >= 2) {
+    const mid = unusedScenarios.find((s) => s.category === 'MID_SALES');
+    if (mid) return mid;
+  }
+
+  // 8. Early career fallback (0–2 years)
+  const early = unusedScenarios.find((s) => s.category === 'EARLY_CAREER');
+  if (early) return early;
+
+  // Fallback to any unused scenario
+  return unusedScenarios[0] || null;
+}
+

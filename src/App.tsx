@@ -18,6 +18,7 @@ import { FollowupQueueTab } from './components/FollowupQueueTab';
 import { NewCandidateModal } from './components/NewCandidateModal';
 import { ConfirmationEmailModal } from './components/ConfirmationEmailModal';
 import { WhatsAppReminderModal } from './components/WhatsAppReminderModal';
+import { AiHrBrainModal } from './components/AiHrBrainModal';
 import { vapiService, VapiCallStatus, DEFAULT_VAPI_ASSISTANT_ID } from './utils/vapiService';
 
 export default function App() {
@@ -32,6 +33,7 @@ export default function App() {
   const [dayAlertFilter, setDayAlertFilter] = useState<'all' | 'overdue' | 'today' | 'tomorrow' | 'pipeline'>('all');
 
   // Modals state
+  const [showBrainModal, setShowBrainModal] = useState(false);
   const [selectedCandidate, setSelectedCandidate] = useState<Candidate | null>(null);
   const [activeCallCandidate, setActiveCallCandidate] = useState<Candidate | null>(null);
   const [activeCallScenario, setActiveCallScenario] = useState<CallScenario>('screening');
@@ -384,6 +386,7 @@ export default function App() {
           handleStartCall(targetCandidate, 'screening');
         }}
         onEndCall={handleEndVapiCall}
+        onOpenBrainModal={() => setShowBrainModal(true)}
         vapiCallStatus={vapiCallStatus}
         activeCandidateCount={candidates.length}
       />
@@ -1011,6 +1014,19 @@ export default function App() {
           defaultTemplate={whatsAppCandidate.template}
           onClose={() => setWhatsAppCandidate(null)}
           onWhatsAppSent={handleWhatsAppSent}
+        />
+      )}
+
+      {/* MODAL 6: AI HR BRAIN COMMAND & LEARNING CENTER */}
+      {showBrainModal && (
+        <AiHrBrainModal
+          isOpen={showBrainModal}
+          onClose={() => setShowBrainModal(false)}
+          candidates={candidates}
+          onSelectCandidateForCall={(cand) => {
+            setShowBrainModal(false);
+            handleStartCall(cand, 'screening');
+          }}
         />
       )}
     </div>

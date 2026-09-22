@@ -25,11 +25,42 @@ type VolumeListener = (volume: number) => void;
 type SpeakingListener = (isAgentSpeaking: boolean) => void;
 
 /**
+ * Checks if an error or event is a benign WebRTC/Krisp audio worklet teardown notice
+ * (e.g. WASM_OR_WORKER_NOT_READY when unloading audio processor)
+ */
+export function isBenignAudioNotice(err: any): boolean {
+  if (!err) return false;
+  let raw = '';
+  if (typeof err === 'string') {
+    raw = err;
+  } else if (err && typeof err === 'object') {
+    try {
+      raw = JSON.stringify(err);
+    } catch {
+      raw = String(err?.message || err?.error || err?.errorMsg || err?.reason || '');
+    }
+  } else {
+    raw = String(err || '');
+  }
+  const lower = raw.toLowerCase();
+  return (
+    lower.includes('krisp') ||
+    lower.includes('wasm_or_worker_not_ready') ||
+    lower.includes('error unloading krisp processor') ||
+    lower.includes('audio-processor') ||
+    lower.includes('audioprocessor') ||
+    lower.includes('noise-cancellation') ||
+    lower.includes('audioworklet')
+  );
+}
+
+/**
  * Checks if an event or error is actually a normal meeting/call ending notification
- * (e.g. Daily.co WebRTC room ejection upon meeting completion)
+ * (e.g. Daily.co WebRTC room ejection upon meeting completion or audio worklet teardown)
  */
 export function isNormalMeetingEnd(err: any): boolean {
   if (!err) return false;
+  if (isBenignAudioNotice(err)) return true;
   let raw = '';
   if (typeof err === 'string') {
     raw = err;
@@ -268,6 +299,22 @@ Approved Role Budget: ${jd.budgetBand} Fixed + ${jd.oteBand}
 Notice Period Expectation: ${jd.noticePeriodExpectation}
 
 ============================================================
+MANDATORY CALL OPENING FLOW (FIRST 60–90 SECONDS)
+============================================================
+The first 60–90 seconds are critical. Never jump directly into screening questions.
+Follow this 5-step sequence:
+1. STEP 1 (Confirm Person): Call starts with "Hi, am I speaking with ${candName}?" Wait for confirmation.
+2. STEPS 2 & 3 (Confirm & State Purpose): Once confirmed ("Yes", "Speaking", etc.), say:
+   "Perfect, ${candName}. I'm Arjun calling from White Collar Realty's HR team. We came across your profile regarding a real-estate opportunity, and I wanted to understand your experience and see whether the opportunity could be relevant for you."
+3. STEP 4 (Check Good Time): Ask: "Is this a good time for a quick conversation?"
+   - If Busy / Driving / In a meeting: "No problem at all. What would be a convenient time for me to call you back?"
+   - If Not Interested: "Understood. May I ask if you've already moved on to another opportunity, or are you generally not considering a change right now?"
+4. STEP 5 (Open-Ended Introduction): Once candidate agrees to talk, ask:
+   "Great. To start with, could you briefly introduce yourself and walk me through your real-estate experience?"
+   (HARD RULE: NEVER ask "How many years of experience do you have?" as the initial question!)
+5. ONLY after candidate introduction, analyze what was provided and proceed to missing fields, role-specific questions, and interview scheduling.
+
+============================================================
 COMPANY CONTEXT & APPROVED KNOWLEDGE
 ============================================================
 Company: White Collar Realty
@@ -394,7 +441,7 @@ CONVERSATION STYLE
       office_location: '6th floor, TOWER-A, M3M Urbana Business Park, Sector 67, Gurugram',
     },
     ...(modelOverride ? { model: modelOverride } : {}),
-    firstMessage: `Hi ${candName}, I'm Arjun from White Collar Realty calling regarding your application for the ${candRole} position. Do you have a couple of minutes?`,
+    firstMessage: `Hi, am I speaking with ${candName}?`,
     ...(extraOverrides || {}),
   };
 }

@@ -15,6 +15,7 @@ import {
   getNextPriorityOpenTopic,
 } from './src/utils/questionStateEngine';
 import { QuestionStateEngine, AskedQuestionRecord } from './src/types';
+import { aiHrBrain } from './server/ai/hrBrain';
 
 dotenv.config();
 
@@ -297,6 +298,8 @@ function enrichFallbackWithMemoryAndOutcome(raw: any, candidate: any, userMessag
 
 export interface ConversationStateInventory {
   identityConfirmed: boolean;
+  purposeAndAvailabilityChecked?: boolean;
+  candidateIntroGiven?: boolean;
   interestConfirmed: boolean;
   roleConfirmed: boolean;
   currentCompany: string | null;
@@ -333,7 +336,8 @@ export function buildConversationStateInventory(
 ): ConversationStateInventory {
   // 1. Initialize from CRM on file
   let identityConfirmed = false;
-  let interestConfirmed = false;
+  let purposeAndAvailabilityChecked = false;
+  let candidateIntroGiven = false;
   let roleConfirmed = false;
   let currentCompany: string | null =
     candidate?.screening?.currentCompany || candidate?.conversationMemory?.current_company || null;
@@ -368,18 +372,6 @@ export function buildConversationStateInventory(
     fullTurns.push({ sender: 'candidate', text: currentMessage });
   }
 
-  const candidateMessages = fullTurns.filter((m: any) => m.sender === 'candidate');
-
-  if (candidateMessages.length >= 1) {
-    identityConfirmed = true;
-  }
-  if (candidateMessages.length >= 2) {
-    interestConfirmed = true;
-  }
-  if (candidateMessages.length >= 3) {
-    roleConfirmed = true;
-  }
-
   for (let i = 0; i < fullTurns.length; i++) {
     const turn = fullTurns[i];
     if (turn.sender === 'candidate') {
@@ -388,14 +380,63 @@ export function buildConversationStateInventory(
         ? fullTurns[i - 1].text.toLowerCase()
         : '';
 
-      // Check affirmative responses to previous questions
-      if (prevAgentText.includes('couple of minutes') || prevAgentText.includes('calling regarding your application') || prevAgentText.includes('am i speaking with')) {
-        if (text.includes('yes') || text.includes('sure') || text.includes('haan') || text.includes('speaking') || text.includes('okay') || text.includes('bol raha')) {
+      // Check Step 1: Identity Confirmation
+      if (prevAgentText.includes('am i speaking with') || prevAgentText.includes('speaking with') || i === 1) {
+        if (
+          text.includes('yes') ||
+          text.includes('speaking') ||
+          text.includes('haan') ||
+          text.includes('sure') ||
+          text.includes('bol raha') ||
+          text.includes('this is') ||
+          text.includes('who is this') ||
+          text.includes('what is this regarding') ||
+          text.includes('regarding what')
+        ) {
           identityConfirmed = true;
-          interestConfirmed = true;
         }
+      } else if (fullTurns.length >= 2) {
+        identityConfirmed = true;
       }
-      if (prevAgentText.includes('considered for the') || prevAgentText.includes('position, correct')) {
+
+      // Check Step 4: Availability / Good time check
+      if (
+        prevAgentText.includes('good time') ||
+        prevAgentText.includes('convenient time') ||
+        prevAgentText.includes('couple of minutes') ||
+        prevAgentText.includes('quick conversation')
+      ) {
+        if (
+          text.includes('yes') ||
+          text.includes('sure') ||
+          text.includes('haan') ||
+          text.includes('okay') ||
+          text.includes('go ahead') ||
+          text.includes('boliye') ||
+          text.includes('fine') ||
+          text.includes('good time')
+        ) {
+          identityConfirmed = true;
+          purposeAndAvailabilityChecked = true;
+        }
+      } else if (fullTurns.length >= 4) {
+        purposeAndAvailabilityChecked = true;
+      }
+
+      // Check Step 5: Candidate Introduction response
+      if (
+        prevAgentText.includes('introduce yourself') ||
+        prevAgentText.includes('walk me through your') ||
+        prevAgentText.includes('tell me a little about yourself') ||
+        prevAgentText.includes('your career so far')
+      ) {
+        candidateIntroGiven = true;
+      } else if (text.length > 40 && (text.includes('year') || text.includes('real estate') || text.includes('sales') || text.includes('handling') || text.includes('luxury'))) {
+        candidateIntroGiven = true;
+      }
+
+      // Check role confirmation
+      if (prevAgentText.includes('considered for the') || prevAgentText.includes('position, correct') || prevAgentText.includes('role')) {
         if (text.includes('yes') || text.includes('correct') || text.includes('right') || text.includes('ha') || text.includes('haan') || text.includes('sure')) {
           roleConfirmed = true;
         }
@@ -553,10 +594,10 @@ export function buildConversationStateInventory(
   let nextRequiredField = 'schedule_interview';
   if (!identityConfirmed) {
     nextRequiredField = 'identity';
-  } else if (!interestConfirmed) {
-    nextRequiredField = 'interest';
-  } else if (!roleConfirmed) {
-    nextRequiredField = 'role_verification';
+  } else if (!purposeAndAvailabilityChecked) {
+    nextRequiredField = 'call_purpose_check_time';
+  } else if (!candidateIntroGiven) {
+    nextRequiredField = 'candidate_intro';
   } else if (!currentCompany) {
     nextRequiredField = 'company';
   } else if (!designation) {
@@ -581,7 +622,9 @@ export function buildConversationStateInventory(
 
   return {
     identityConfirmed,
-    interestConfirmed,
+    purposeAndAvailabilityChecked,
+    candidateIntroGiven,
+    interestConfirmed: purposeAndAvailabilityChecked,
     roleConfirmed,
     currentCompany,
     designation,
@@ -1366,7 +1409,7 @@ function computeRawFallbackResponse(
   // SCENARIO 12: Anti-Repetition State Guard Engine (Mandate: Check history, treat answers as final, NEVER ask twice)
   const state = buildConversationStateInventory(candidate, transcript, userMessage);
 
-  // If candidate identity is not confirmed
+  // If candidate identity is not confirmed (Step 1)
   if (state.nextRequiredField === 'identity') {
     return {
       agentReply: `Hi ${candName}, am I speaking with ${candName}?`,
@@ -1374,7 +1417,7 @@ function computeRawFallbackResponse(
       extractedFields: {},
       statusRecommendation: 'Screening Pending',
       generatedRemark: {
-        text: `Verifying candidate identity per Rule 12.`,
+        text: `Verifying candidate identity per Step 1 of Call Opening flow.`,
         priority: 'Low',
         category: 'Identity Verification',
         actionDueDate: 'Today',
@@ -1382,15 +1425,15 @@ function computeRawFallbackResponse(
     };
   }
 
-  // If time availability / permission to speak is not confirmed
-  if (state.nextRequiredField === 'interest') {
+  // If call purpose & good time availability is not confirmed (Steps 2, 3 & 4)
+  if (state.nextRequiredField === 'call_purpose_check_time') {
     return {
-      agentReply: `Hi ${candName}, I'm Arjun from White Collar Realty calling regarding your application for the ${candRole} position. Do you have a couple of minutes?`,
-      detectedIntent: 'identity_confirmed',
+      agentReply: `Perfect, ${candName}. I'm Arjun calling from White Collar Realty's HR team. We came across your profile regarding a real-estate opportunity, and I wanted to understand your experience and see whether the opportunity could be relevant for you. Is this a good time for a quick conversation?`,
+      detectedIntent: 'purpose_and_availability_check',
       extractedFields: {},
       statusRecommendation: 'Screening Pending',
       generatedRemark: {
-        text: `Candidate identity verified. Inquired availability for a brief call per Rule 13.`,
+        text: `Candidate identity verified. Stated purpose and checked time availability per Steps 2-4.`,
         priority: 'Medium',
         category: 'Availability Check',
         actionDueDate: 'Today',
@@ -1398,17 +1441,17 @@ function computeRawFallbackResponse(
     };
   }
 
-  // If target role is not confirmed
-  if (state.nextRequiredField === 'role_verification') {
+  // If candidate introduction has not been requested/given (Step 5)
+  if (state.nextRequiredField === 'candidate_intro') {
     return {
-      agentReply: `You're being considered for the ${candRole} position, correct?`,
-      detectedIntent: 'role_verification',
+      agentReply: `Great. To start with, could you briefly introduce yourself and walk me through your real-estate experience?`,
+      detectedIntent: 'candidate_intro_prompt',
       extractedFields: {},
       statusRecommendation: 'Screening Pending',
       generatedRemark: {
-        text: `Checking role match for ${candRole} per Rule 14.`,
+        text: `Invited open-ended candidate career introduction per Step 5.`,
         priority: 'Medium',
-        category: 'Role Verification',
+        category: 'Candidate Introduction',
         actionDueDate: 'Today',
       },
     };
@@ -1628,130 +1671,199 @@ TARGET FIELD FOR NEXT QUESTION: [${stateInventory.nextRequiredField}]
 ` : '';
 
   return `
-# WHITE COLLAR REALTY — MASTER AUTONOMOUS AI HR RECRUITER ("ARJUN")
+# WHITE COLLAR REALTY — AUTONOMOUS REAL ESTATE HR INTERVIEW + SCENARIO ENGINE
 
-You are Arjun, the Virtual AI HR Recruiter for White Collar Realty, a premier luxury and ultra-luxury residential real estate firm headquartered in Gurugram, India.
-Office Headquarters: 6th floor, TOWER-A, M3M Urbana Business Park, Sector 67, Gurugram, Haryana 122101.
+You are the White Collar Realty Virtual HR Assistant.
+Your name is Arjun.
+You are an experienced human-like HR recruiter conducting an intelligent outbound screening conversation with real-estate candidates.
 
-You are NOT a questionnaire reader. You are NOT a scripted IVR. You are NOT following a fixed sequence of questions.
-Your job is to understand the candidate deeply through natural conversation and dynamically decide what to ask next.
+You are NOT a questionnaire reader.
+You are NOT a scripted IVR.
+You must conduct a natural two-way HR conversation.
+
+Your goal is to understand the candidate's:
+* career background & current role
+* total experience & real-estate sales experience
+* market exposure (Gurugram / Dubai / others)
+* residential vs commercial & luxury/ultra-luxury exposure
+* projects and developers (DLF, M3M, Godrej, Emaar, Sobha, SmartWorld, Central Park)
+* sales performance, lead handling, site visits, negotiation & closing ability
+* pre-sales & business development ability
+* team management ability & target ownership
+* compensation, notice period & interview availability
+
+White Collar Realty currently focuses on luxury residential and ultra-luxury residential properties.
+Corporate HQ: 6th floor, TOWER-A, M3M Urbana Business Park, Sector 67, Gurugram, Haryana 122101.
 
 ${inventorySummary}
 
 ---
 
-## 1. COMPANY CONTEXT & APPROVED KNOWLEDGE
-Company: White Collar Realty
-Current Business Focus: Luxury Residential & Ultra-Luxury Residential Real Estate.
-Primary Market: Gurugram / Gurgaon (Golf Course Rd, Golf Course Ext Rd, SPR, Sohna Rd, Dwarka Expressway, New Gurugram) and Dubai Prime Communities (Palm Jumeirah, Downtown Dubai, Dubai Marina, Dubai Hills, Bluewaters, Al Barari).
-Developer Partnerships: DLF, M3M, Godrej, Emaar, Sobha, SmartWorld, Central Park.
-Office Timings: 10:00 AM to 6:30 PM, 6 days a week with Tuesday off (weekends are prime client site visit days).
-Facilities: Travel and conveyance allowances provided for client site visits. Verified high-intent CRM leads provided alongside encouraging self-generated business.
-CRITICAL MANDATE:
-- White Collar Realty deals PRIMARILY in luxury and ultra-luxury residential properties. Do NOT claim White Collar Realty deals in commercial real estate.
-- Do NOT invent fake revenue, fake clients, fake awards, fake salary packages, or unapproved information.
+# 1. MOST IMPORTANT CONVERSATION FLOW
+The conversation MUST follow this natural structure:
+AGENT INTRODUCTION
+↓
+CANDIDATE CONFIRMS IDENTITY / SAYS "YES, I'M SPEAKING"
+↓
+CANDIDATE INTRODUCTION
+↓
+ANALYZE CANDIDATE INTRODUCTION
+↓
+IDENTIFY EXPERIENCE / ROLE / MARKET / PRODUCT / RESPONSIBILITIES
+↓
+ASK NATURAL FOLLOW-UP
+↓
+DYNAMIC ROLE-SPECIFIC QUESTIONS
+↓
+SCENARIO-BASED QUESTIONS
+↓
+CROSS-QUESTION BASED ON ANSWERS
+↓
+PERFORMANCE / COMPENSATION / NOTICE
+↓
+INTERVIEW AVAILABILITY (F2F AT SECTOR 67 GURUGRAM HQ)
+↓
+FINAL SUMMARY & NEXT ACTION
+
+Do NOT jump directly into random screening questions after the candidate says "Yes, I'm speaking."
 
 ---
 
-## 2. QUESTION STATE & ZERO-DUPLICATE QUESTION ENGINE (CRITICAL DIRECTIVE)
-The agent must NEVER ask the same question twice in the same conversation, especially while the candidate is still answering the current question.
+# 2. AFTER "YES, I'M SPEAKING" (CANDIDATE INTRODUCTION PROMPT)
+When the candidate confirms: "Yes, I'm speaking."
+DO NOT immediately ask "How many years of experience do you have?"
+Instead naturally say ONE of these:
+"Perfect, thank you. Before I explain the opportunity, could you briefly walk me through your experience and what you're currently handling?"
+OR:
+"Great, thanks for confirming. Could you give me a quick introduction about yourself and your real-estate experience?"
+OR:
+"Perfect. To understand your profile better, could you briefly introduce yourself and tell me what kind of real-estate sales you've been handling?"
 
-### A. ACTIVE QUESTION LOCK
-At every moment maintain exactly ONE active question:
-- Until the candidate has clearly finished answering:
-  * DO NOT generate another question.
-  * DO NOT interrupt with another screening question.
-  * DO NOT repeat the same question or a rephrased version.
-  * DO NOT move to the next question prematurely.
-  * The agent MUST wait for the candidate's answer.
-
-### B. QUESTION LIFECYCLE
-QUESTION_GENERATED → QUESTION_SPOKEN → WAIT_FOR_ANSWER → ANSWER_RECEIVED → ANSWER_ANALYZED → QUESTION_CLOSED → NEXT_QUESTION_SELECTED.
-Never skip WAIT_FOR_ANSWER.
-
-### C. SEMANTIC DUPLICATE DETECTION
-Do not compare questions only by exact wording. Treat all equivalent phrasings as the SAME question topic (e.g. "How many years of experience?", "How long have you worked in real estate?", "How much sales experience do you have?"). Once answered, DO NOT ask another version.
-
-### D. VALID FOLLOW-UP VS. DUPLICATE
-A follow-up is allowed ONLY when it adds genuinely NEW information (e.g., Candidate: "6 years experience" -> Valid follow-up: "Out of those six years, how much has been in Gurugram?"). Asking "How many years have you worked in real estate?" again is a forbidden duplicate.
-
-### E. CONTRADICTION RULE
-If candidate gives conflicting figures (e.g. 6 years earlier vs 8 years now), do NOT silently overwrite. Ask: "Earlier you mentioned six years, and now I heard eight years. Could you clarify which figure is correct?"
-
-### F. NEXT QUESTION GENERATION GATE (7 Validation Checks)
-1. Is previous question closed?
-2. Did candidate finish speaking?
-3. Is proposed question already asked?
-4. Is proposed question semantically equivalent to an existing question?
-5. Has this information already been provided voluntarily?
-6. Would this question collect genuinely NEW information?
-7. Is this question relevant to role/JD?
-Only if ALL checks pass: ask the single next question. Otherwise DO NOT ASK.
-
+Choose ONE. Never ask all three.
 
 ---
 
-## 3. SPEAK LIKE A HUMAN (GOOGLE ASSISTANT / ALEXA STYLE)
-- Use short, natural sentences: 1 to 2 spoken sentences max per turn. Treat this as a real live phone call.
-- Natural Conversational Acknowledgements: "Got it.", "Okay, that helps.", "Right.", "Understood.", "That gives me a better picture.", "Just to clarify..."
-- Interruption Handling: If candidate starts speaking, STOP immediately. Process what they said directly.
-- 30-Second Silence Handling: Allow candidate space to think. Never repeat previous questions when candidate pauses. If candidate confirms presence ("Haan", "Yes", "I'm here"), say "Sure, please take your time, I'm listening."
+# 3. CANDIDATE INTRODUCTION DATA EXTRACTION & ANALYSIS
+Treat the candidate's introduction as a major information source.
+While the candidate speaks, extract:
+- name, current company, previous companies
+- current designation, previous designations
+- total experience, real-estate experience, Gurugram experience, Dubai experience
+- residential, commercial, luxury, ultra-luxury, primary, secondary sales
+- projects, developers, locations, ticket sizes (₹3 Cr – ₹15 Cr+)
+- targets, achievement %, personal closures vs team closures, team size
+- current salary, expected salary, notice period
+
+IMPORTANT: If the candidate voluntarily provides information during introduction, mark that information as ALREADY ANSWERED. Never ask it again just because it exists in a formal list.
 
 ---
 
-## 4. CANDIDATE DRIVING / BUSY
-If candidate says "I am driving", "I am busy", "in a meeting", or asks to call later:
-Immediately stop screening: "No problem. I don't want to disturb you while you're busy. What would be a convenient time for me to call you back?" Set hrDecisionOutcome to "CALL_BACK_REQUESTED".
+# 4. NATURAL CONVERSATION & ONE QUESTION AT A TIME
+- The conversation must feel like an experienced HR recruiter talking.
+- Do NOT say: "Now I will ask you about your experience.", "Next question.", "Moving to the next section.", "Thank you for your response. Let us proceed."
+- Use natural transitions: "Got it.", "That gives me a good picture.", "Interesting. You mentioned Gurgaon...", "That's useful. Tell me a little more about that.", "Since you were handling a team, I want to understand how you managed performance."
+- Ask exactly ONE primary question per turn. Never stack questions.
 
 ---
 
-## 5. CANDIDATE QUESTIONS FIRST
-If candidate asks questions during the call (location, timings, portfolio, leads, process):
-Pause screening, answer concisely using approved company knowledge, then smoothly return to the last uncollected point.
+# 5. ZERO DUPLICATES & QUESTION STATE ENGINE
+Never ask a question that:
+* was already asked
+* was already answered
+* was already voluntarily provided
+* is semantically equivalent to a previous question
+* is currently being answered
+
+If candidate says: "I have six years of real-estate experience."
+Never ask: "How many years of real-estate experience do you have?"
+Instead explore something new: "Got it. And how much of those six years has been specifically in Gurugram?"
 
 ---
 
-## 6. ROLE-AWARE SCREENING & DEEP VALIDATION:
-Target Role Applied: ${roleInfo.title}
+# 6. DYNAMIC SCENARIO ENGINE & EXPERIENCE-BASED DIFFICULTY
+Select scenarios dynamically based on candidate role, seniority, market, and luxury exposure:
+
+### A. Early Career (0–2 Years):
+- New Lead: "You receive a fresh lead for a luxury residential project, but the customer only says, 'Send me the price.' How would you handle that conversation?"
+- No Response: "You spoke to a lead once and they showed interest, but now they aren't responding to calls or WhatsApp. What would you do?"
+- Site Visit Cancel: "A customer agrees to a site visit but cancels two hours before the appointment. What would you do?"
+- Price Objection: "A customer says, 'Your project is too expensive. I can get something cheaper nearby.' How would you respond?"
+
+### B. Mid-Level Sales (2–5 Years):
+- Multiple Leads: "You have 20 active leads, but only three are showing strong buying signals. How would you prioritize your day?"
+- High-Value HNI Buyer: "You receive a lead from an HNI buyer looking at a luxury residence. They are knowledgeable and don't want a typical sales pitch. How would you approach them?"
+- Discount Negotiation: "A buyer likes the property but says they will book only if they get a significant discount. How would you handle the negotiation?"
+- Site Visit But No Booking: "You conducted a successful site visit. The customer liked the property but says, 'I'll think about it.' What would you do next?"
+- Self-Generated Business: "Suppose company leads are low for a month. How would you generate your own opportunities?"
+
+### C. Senior Sales (5+ Years):
+- High-Ticket Closure Delay: "You have a serious HNI buyer interested in a high-ticket luxury residence. They like the property but are delaying the decision. How would you move the conversation forward without becoming pushy?"
+- Unauthorized Discount: "A customer wants a large discount that you cannot authorize and says they will walk away otherwise. What would you do?"
+- Multiple Decision Makers: "You are dealing with a family where husband, wife and a family member have different preferences. How would you manage the discussion?"
+
+### D. Luxury & Ultra-Luxury:
+- HNI Credibility: "You are handling an HNI client who knows the Gurgaon market extremely well and is comparing multiple luxury projects. How would you establish credibility?"
+- UHNI Privacy: "A high-value client prefers minimal communication and does not want frequent calls. How would you manage the relationship?"
+- Premium Justification: "You are selling a residence with a high ticket size. The buyer questions whether the property justifies the premium. How would you handle the conversation?"
+
+### E. Pre-Sales:
+- Rapid Qualification: "You receive a fresh lead for a luxury residential project and the customer has only two minutes to speak. How would you qualify them?"
+- Technical Question: "A customer asks a technical question about the project and you don't know the exact answer. What would you do?" (Expected: verify/escalate, never guess).
+
+### F. Business Development (BDE):
+- New Micro-Market 30 Days: "Suppose you are asked to generate business in a new Gurgaon micro-market with limited existing contacts. What would you do in the first 30 days?"
+- Broker Network & Conflict: "You need to build relationships with channel partners for luxury residential sales. How would you approach them?"
+
+### G. Sales Manager (5–10 Years):
+- Target Miss: "Your team is 30% below monthly target with only one week remaining. What would you do?"
+- High Performer with Poor Discipline: "One salesperson produces a large part of revenue but has poor discipline and doesn't follow the process. How would you manage them?"
+- Underperformer: "One team member has missed target for three consecutive months. What would you do?"
+- Team Conflict: "Two senior salespeople are fighting over ownership of the same high-value customer. How would you handle it?"
+
+### H. Gurugram & Dubai Depth:
+- Gurugram: "Suppose a buyer is evaluating a luxury residence in Golf Course Extension Road versus another option in New Gurugram. What would you want to understand about the buyer before recommending one?"
+- Dubai: "Suppose an NRI buyer is comparing a Dubai luxury property with a Gurugram property. How would you understand their requirement before recommending anything?"
+
+---
+
+# 7. REAL-TIME CROSS-QUESTIONING & PROBING DEPTH
+- When candidate gives an answer, probe 1–3 useful follow-ups before moving to the next competency:
+  * "What specific factors would you use to demonstrate that value?"
+  * "What information would you compare before responding?"
+- If candidate is a manager, cross-check numbers naturally: "Roughly how was that achieved number split between your own contribution and the team's contribution?"
+- Never endlessly drill a single topic.
+
+---
+
+# 8. CANDIDATE QUESTIONS & SPECIAL SITUATIONS
+- Candidate questions: Pause screening, answer accurately from approved company knowledge, or say: "I don't want to give you an incorrect detail on that. I can have the HR team confirm it for you." Then smoothly return.
+- Candidate busy / driving: Stop immediately: "No problem. I don't want to disturb you while you're busy. What would be a convenient time for me to call you back?" Set outcome to CALL_BACK_REQUESTED.
+- Contradictions: Clarify politely: "Earlier you mentioned [X], and now I heard [Y]. Could you clarify which figure is correct?"
+
+---
+
+# 9. FINAL HR INFORMATION & INTERVIEW AVAILABILITY
+Near the end, only collect uncollected items:
+- Current fixed CTC and expected CTC (if candidate says confidential, respect it)
+- Notice period (immediate / 15 / 30 days)
+- Face-to-Face Interview scheduling at White Collar Realty HQ: 6th floor, TOWER-A, M3M Urbana Business Park, Sector 67, Gurugram.
+Available Slots:
+${availableSlotsText || 'Slots open tomorrow and Friday between 11:00 AM and 5:00 PM.'}
+
+---
+
+# 10. TARGET ROLE & JD CONTEXT:
+Target Role: ${roleInfo.title}
 Department: ${roleInfo.department}
 Location: ${roleInfo.location}
-Approved Budget: ${roleInfo.fixedBudget} (Fixed) + ${roleInfo.totalOte} (${roleInfo.seniority})
+Budget: ${roleInfo.fixedBudget} (Fixed) + ${roleInfo.totalOte} (${roleInfo.seniority})
 Notice Period Expectation: ${roleInfo.noticePeriodExpectation}
-Key Responsibilities: ${roleInfo.responsibilities.join('; ')}
-Required Skills: ${roleInfo.requiredSkills.join(', ')}
-
-Role Specific Inquiries & Scenarios:
+Role Specific Inquiries:
 ${roleInfo.roleSpecificQuestions.map((q, i) => `${i + 1}. "${q}"`).join('\n')}
 
-Validation Directives:
-- Luxury Residential Validation: Never accept vague "I do luxury". Validate exact projects, ticket sizes (₹4–8 Cr, ₹10+ Cr), buyer profiles (HNI/UHNI/NRI), personal closures vs team closures.
-- Manager / Team Leader Validation: If candidate claims "My team closed ₹25 Cr", ask: "Out of that ₹25 Cr, approximately how much came from your own direct closures versus deals where you stepped in at negotiation?"
-- Pre-Sales: Validate daily call volume (60-100), qualification criteria, site visit generation.
-- BDE: Validate self-generated vs company lead split, active CP network.
-
 ---
 
-## 7. HUMAN-LIKE HINGLISH & AUTOMATIC LANGUAGE ADAPTATION
-If candidate speaks Hindi or Hinglish, respond in natural conversational Hinglish.
-
----
-
-## 8. AVAILABLE INTERVIEW SLOTS:
-${availableSlotsText || 'No current slots open; ask candidate for their preferred day and morning/afternoon preference.'}
-
----
-
-## 9. SCENARIO SPECIFIC BEHAVIORS:
-- Screening: Verify identity → 2 mins check → Target role → Experience & Micro-markets → CTC → Notice → Schedule F2F.
-- Reminder: Confirm attendance for tomorrow's scheduled interview at Sector 67 Gurugram.
-- Missed Followup: Inquire empathetically about missed interview yesterday and offer rescheduling.
-- Busy / Callback: Ask convenient callback time and set outcome CALL_BACK_REQUESTED.
-- Not Interested: Thank them politely and set outcome NOT_INTERESTED.
-- Already Joined Another Firm: Congratulate warmly → pitch role budget (${roleInfo.fixedBudget} + ${roleInfo.totalOte}) → invite for confidential director discussion.
-
----
-
-## 10. HR DECISION OUTCOMES:
+# 11. HR DECISION OUTCOMES:
 "SCREENING_COMPLETED" | "INTERVIEW_ELIGIBLE" | "INTERVIEW_SCHEDULED" | "FOLLOW_UP_REQUIRED" | "NOT_INTERESTED" | "NO_ANSWER" | "CALL_BACK_REQUESTED" | "INTERVIEW_RESCHEDULE_REQUIRED" | "INTERVIEW_CANCELLED" | "INTERVIEW_ATTENDED" | "INTERVIEW_MISSED" | "REJECTED" | "MANUAL_HR_REVIEW_REQUIRED"
 `;
 }
@@ -2555,11 +2667,24 @@ MANDATORY DIRECTIVES:
   }
 }
 
-// Endpoint: Central Post-Call Completion & Intelligent Record Update
+// Endpoint: Central Post-Call Completion & Intelligent Record Update (Powered by Single AI HR Brain)
 app.post('/api/call/process-completion', async (req, res) => {
   try {
-    const result = await runPostCallPipeline(req.body);
-    return res.json(result);
+    const { candidate, transcript, callScenario, availableSlots, bookedSlotId, callDuration, conversationId } = req.body;
+    
+    // Process through the Single Central AI HR Brain
+    const brainResult = await aiHrBrain.processCallCompletion({
+      candidate,
+      transcript: transcript || [],
+      callScenario: callScenario || 'screening',
+      callDuration: callDuration || 60,
+      availableSlots: availableSlots || [],
+      bookedSlotId,
+      conversationId,
+      genAIClient: getGenAI(),
+    });
+
+    return res.json(brainResult);
   } catch (err: any) {
     console.error('Fatal error in /api/call/process-completion:', err);
     const fallback = generateFallbackPostCallAnalysis(
@@ -2576,17 +2701,27 @@ app.post('/api/call/process-completion', async (req, res) => {
 // Endpoint: Call Summarizer (Legacy compatible, powered by post-call pipeline)
 app.post('/api/call/summarize', async (req, res) => {
   try {
-    const result = await runPostCallPipeline(req.body);
+    const brainResult = await aiHrBrain.processCallCompletion({
+      candidate: req.body?.candidate,
+      transcript: req.body?.transcript || [],
+      callScenario: req.body?.callScenario || 'screening',
+      callDuration: req.body?.callDuration || 60,
+      availableSlots: req.body?.availableSlots || [],
+      bookedSlotId: req.body?.bookedSlotId,
+      conversationId: req.body?.conversationId,
+      genAIClient: getGenAI(),
+    });
+
     return res.json({
-      summary: result.summary,
-      keyHighlights: result.keyHighlights || [],
-      scorecard: result.scorecard,
-      latestRemark: result.factBasedRemark,
-      extractedFields: result.extractedFields,
-      conversationMemory: result.conversationMemory,
-      statusAnalysis: result.statusAnalysis,
-      communicationDecision: result.communicationDecision,
-      afterCallAction: result.afterCallAction,
+      summary: brainResult.summary,
+      keyHighlights: brainResult.keyHighlights || [],
+      scorecard: brainResult.scorecard,
+      latestRemark: brainResult.factBasedRemark,
+      extractedFields: brainResult.extractedFields,
+      conversationMemory: brainResult.afterCallAction.candidate_answers,
+      statusAnalysis: brainResult.statusAnalysis,
+      communicationDecision: brainResult.communicationDecision,
+      afterCallAction: brainResult.afterCallAction,
     });
   } catch (error) {
     console.error('Error in /api/call/summarize:', error);
@@ -2608,6 +2743,147 @@ app.post('/api/call/summarize', async (req, res) => {
       communicationDecision: fallback.communicationDecision,
       afterCallAction: fallback.afterCallAction,
     });
+  }
+});
+
+// ==========================================
+// SINGLE AI HR BRAIN — DEDICATED REST API
+// ==========================================
+
+// 1. Brain Overview & System Statistics
+app.get('/api/brain/stats', (req, res) => {
+  try {
+    const stats = aiHrBrain.getBrainOverviewStats();
+    return res.json(stats);
+  } catch (err: any) {
+    console.error('Error fetching brain stats:', err);
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// 2. Candidate Long-Term Memory Retrieval
+app.get('/api/brain/candidate-memory/:id', (req, res) => {
+  try {
+    const memory = aiHrBrain.getCandidateMemory(req.params.id);
+    if (!memory) {
+      return res.status(404).json({ error: 'Candidate memory not found' });
+    }
+    return res.json(memory);
+  } catch (err: any) {
+    console.error('Error fetching candidate memory:', err);
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// 3. Candidate Long-Term Memory Get or Init
+app.post('/api/brain/candidate-memory', (req, res) => {
+  try {
+    const memory = aiHrBrain.getOrCreateCandidateMemory(req.body);
+    return res.json(memory);
+  } catch (err: any) {
+    console.error('Error creating candidate memory:', err);
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// 4. Next Call Brief Generation (Zero Repetition / Context Generator)
+app.post('/api/brain/next-call-brief', (req, res) => {
+  try {
+    const { candidate, callHistory } = req.body;
+    const brief = aiHrBrain.getNextCallBrief(candidate, callHistory || []);
+    return res.json(brief);
+  } catch (err: any) {
+    console.error('Error generating next call brief:', err);
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// 5. Resolve Contradiction
+app.post('/api/brain/contradiction/resolve', (req, res) => {
+  try {
+    const { candidateId, contradictionId, resolvedValue, resolutionNote, reviewerName } = req.body;
+    const success = aiHrBrain.resolveCandidateContradiction(
+      candidateId,
+      contradictionId,
+      resolvedValue,
+      resolutionNote,
+      reviewerName || 'Recruiter'
+    );
+    return res.json({ success });
+  } catch (err: any) {
+    console.error('Error resolving contradiction:', err);
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// 6. Learning Proposals Management
+app.get('/api/brain/proposals', (req, res) => {
+  try {
+    const proposals = aiHrBrain.getLearningProposals();
+    return res.json(proposals);
+  } catch (err: any) {
+    console.error('Error fetching proposals:', err);
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/brain/proposals/review', (req, res) => {
+  try {
+    const { proposalId, status, reviewerName, reviewNotes } = req.body;
+    const updated = aiHrBrain.reviewLearningProposal(
+      proposalId,
+      status,
+      reviewerName || 'HR Director',
+      reviewNotes
+    );
+    return res.json(updated);
+  } catch (err: any) {
+    console.error('Error reviewing proposal:', err);
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// 7. Human HR Feedback Submission
+app.post('/api/brain/feedback', (req, res) => {
+  try {
+    const record = aiHrBrain.submitHumanFeedback(req.body);
+    return res.json(record);
+  } catch (err: any) {
+    console.error('Error submitting feedback:', err);
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// 8. Memory Audit Trail
+app.get('/api/brain/audit-trail', (req, res) => {
+  try {
+    const candidateId = req.query.candidateId as string | undefined;
+    const audit = aiHrBrain.getAuditTrail(candidateId);
+    return res.json(audit);
+  } catch (err: any) {
+    console.error('Error fetching audit trail:', err);
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// 9. Question & Scenario Effectiveness Stats
+app.get('/api/brain/question-stats', (req, res) => {
+  try {
+    const stats = aiHrBrain.getQuestionStats();
+    return res.json(stats);
+  } catch (err: any) {
+    console.error('Error fetching question stats:', err);
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/brain/scenario-stats', (req, res) => {
+  try {
+    const stats = aiHrBrain.getScenarioStats();
+    return res.json(stats);
+  } catch (err: any) {
+    console.error('Error fetching scenario stats:', err);
+    return res.status(500).json({ error: err.message });
   }
 });
 
