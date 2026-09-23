@@ -4,7 +4,7 @@ import {
   Sparkles, CheckCircle2, AlertTriangle, ArrowUpRight, 
   Building, MapPin, Briefcase, DollarSign, MessageSquare, 
   Bot, Phone, ChevronRight, RefreshCw, Plus, CheckCircle, 
-  HelpCircle, Volume2, Mail, Bell, ShieldAlert, Tag
+  HelpCircle, Volume2, Mail, Bell, ShieldAlert, Tag, Radio
 } from 'lucide-react';
 import { Candidate, InterviewSlot, CallScenario } from './types';
 import { INITIAL_CANDIDATES, INITIAL_INTERVIEW_SLOTS } from './data/mockCandidates';
@@ -15,6 +15,7 @@ import { VoiceCallModal } from './components/VoiceCallModal';
 import { VapiCallModal } from './components/VapiCallModal';
 import { InterviewScheduleTab } from './components/InterviewScheduleTab';
 import { FollowupQueueTab } from './components/FollowupQueueTab';
+import { AutomationQueueTab } from './components/AutomationQueueTab';
 import { NewCandidateModal } from './components/NewCandidateModal';
 import { ConfirmationEmailModal } from './components/ConfirmationEmailModal';
 import { WhatsAppReminderModal } from './components/WhatsAppReminderModal';
@@ -369,8 +370,8 @@ export default function App() {
     const matchesSearch =
       c.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       c.appliedRole.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      (c.screening.currentCompany || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
-      (c.screening.currentLocation || '').toLowerCase().includes(searchQuery.toLowerCase());
+      (c.screening?.currentCompany || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (c.screening?.currentLocation || '').toLowerCase().includes(searchQuery.toLowerCase());
 
     if (!matchesSearch) return false;
 
@@ -653,6 +654,19 @@ export default function App() {
               <MessageSquare className="w-3.5 h-3.5" />
               <span>Voice Logs & Transcripts</span>
             </button>
+
+            <button
+              id="tab-automation"
+              onClick={() => setActiveTab('automation')}
+              className={`px-4 py-2 rounded-xl text-xs font-bold transition flex items-center gap-2 shrink-0 ${
+                activeTab === 'automation'
+                  ? 'bg-amber-500 text-slate-950 shadow-md shadow-amber-500/20'
+                  : 'bg-slate-900/90 text-slate-400 hover:text-slate-200 border border-slate-800'
+              }`}
+            >
+              <Radio className={`w-3.5 h-3.5 ${activeTab === 'automation' ? 'text-slate-950 animate-pulse' : 'text-amber-400 animate-pulse'}`} />
+              <span>AI Calling Queue (Dry Run)</span>
+            </button>
           </div>
 
           {/* Search & Status Filters */}
@@ -819,7 +833,7 @@ export default function App() {
 
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               {filteredCandidates.map((cand) => {
-                const s = cand.screening;
+                const s = cand.screening || {};
                 const hasREExp = s.realEstateExperienceYears !== undefined;
                 const hasSalary = s.currentSalaryLPA || s.expectedSalaryLPA;
                 const isConfirmed = cand.status === 'Attendance Confirmed';
@@ -1148,6 +1162,14 @@ export default function App() {
               </div>
             )}
           </div>
+        )}
+
+        {/* TAB 5: AUTOMATED AI HR CALLING QUEUE (DRY RUN) */}
+        {activeTab === 'automation' && (
+          <AutomationQueueTab
+            candidates={candidates}
+            onSelectCandidate={(cand) => setSelectedCandidate(cand)}
+          />
         )}
       </main>
 

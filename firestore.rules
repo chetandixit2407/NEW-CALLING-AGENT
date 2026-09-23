@@ -1,69 +1,8 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-
-    // Helper functions
-    function isSignedIn() {
-      return request.auth != null;
-    }
-
-    function isOwner(userId) {
-      return isSignedIn() && request.auth.uid == userId;
-    }
-
-    function incoming() {
-      return request.resource.data;
-    }
-
-    function existing() {
-      return resource.data;
-    }
-
-    function isValidId(id) {
-      return id is string && id.size() > 0 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
-    }
-
-    // Default Deny
     match /{document=**} {
-      allow read, write: if false;
-    }
-
-    // Users Collection (Recruiter profiles)
-    match /users/{userId} {
-      allow read: if isSignedIn();
-      allow create: if isOwner(userId) 
-        && incoming().uid == request.auth.uid
-        && incoming().email is string
-        && incoming().email.size() <= 120;
-      allow update: if isOwner(userId)
-        && incoming().uid == existing().uid;
-      allow delete: if false;
-    }
-
-    // Candidates Collection
-    match /candidates/{candidateId} {
-      allow read: if isSignedIn();
-      allow create: if isSignedIn()
-        && incoming().name is string && incoming().name.size() > 0 && incoming().name.size() <= 150
-        && incoming().phone is string && incoming().phone.size() <= 50;
-      allow update: if isSignedIn();
-      allow delete: if isSignedIn();
-    }
-
-    // Interview Slots Collection
-    match /interview_slots/{slotId} {
-      allow read: if isSignedIn();
-      allow create, update: if isSignedIn();
-      allow delete: if isSignedIn();
-    }
-
-    // Call Logs Collection
-    match /call_logs/{callId} {
-      allow read: if isSignedIn();
-      allow create: if isSignedIn()
-        && incoming().candidateId is string;
-      allow update: if isSignedIn();
-      allow delete: if false;
+      allow read, write: if true;
     }
   }
 }

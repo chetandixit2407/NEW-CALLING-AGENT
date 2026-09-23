@@ -140,6 +140,7 @@ export const VoiceCallModal: React.FC<VoiceCallModalProps> = ({
   // Synchronous, idempotent cleanup helper for call termination
   const terminateAudioPipeline = () => {
     isCallEndedRef.current = true;
+    fetch(`/api/candidate/${candidate.id}/unlock`, { method: 'POST' }).catch(() => {});
     if (stopRingRef.current) {
       try {
         stopRingRef.current();
@@ -167,6 +168,13 @@ export const VoiceCallModal: React.FC<VoiceCallModalProps> = ({
   useEffect(() => {
     let isMounted = true;
     isCallEndedRef.current = false;
+
+    // Acquire Calling Lock (Rule 16)
+    fetch(`/api/candidate/${candidate.id}/lock`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ callId: `live-${Date.now()}` }),
+    }).catch(() => {});
 
     // Discard any lingering SpeechSynthesis speech
     if (typeof window !== 'undefined' && 'speechSynthesis' in window) {

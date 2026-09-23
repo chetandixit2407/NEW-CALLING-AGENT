@@ -12,6 +12,17 @@ import {
   CandidateMultiCallBehaviorProfile,
 } from '../../src/types';
 import { behaviorAnalyzer } from '../ai/behaviorAnalyzer';
+import {
+  db,
+  doc,
+  collection,
+  getDoc,
+  getDocs,
+  setDoc,
+  updateDoc,
+  DATABASE_PROVIDER,
+  retryFirestoreOp,
+} from '../services/firestoreDb';
 
 export interface MemoryAuditRecord {
   id: string;
@@ -26,6 +37,11 @@ export interface MemoryAuditRecord {
   confidence: number;
   timestamp: string;
 }
+
+const MEMORIES_COLLECTION = 'candidate_memories';
+const AUDIT_COLLECTION = 'memory_audit_trail';
+const PROPOSALS_COLLECTION = 'learning_proposals';
+const BEHAVIOR_PROFILES_COLLECTION = 'behavior_profiles';
 
 const DATA_DIR = path.join(process.cwd(), 'data');
 const MEMORY_FILE = path.join(DATA_DIR, 'candidate_memories.json');
@@ -73,7 +89,8 @@ export class MemoryRepository {
     this.initialize();
   }
 
-  private initialize() {
+  private async initialize() {
+    // 1. Initialize from local files for fast cold boot cache
     const rawMemories = loadJsonFile<Record<string, CandidateLongTermMemory>>(MEMORY_FILE, {});
     this.memories = new Map(Object.entries(rawMemories));
     this.auditTrail = loadJsonFile<MemoryAuditRecord[]>(AUDIT_FILE, []);
@@ -82,9 +99,45 @@ export class MemoryRepository {
     const rawBehavior = loadJsonFile<Record<string, CandidateMultiCallBehaviorProfile>>(BEHAVIOR_FILE, {});
     this.behaviorProfiles = new Map(Object.entries(rawBehavior));
 
-    // Seed default initial memories if empty
+    // Seed default initial memories if completely empty
     if (this.memories.size === 0) {
       this.seedInitialCandidateMemories();
+    }
+
+    // 2. If Firestore is active, asynchronously hydrate the cache from Firestore
+    if (DATABASE_PROVIDER === 'firestore') {
+      this.hydrateFromFirestore().catch((err) => {
+        console.warn('[MemoryRepository] Firestore initial hydration warning:', err);
+      });
+    }
+  }
+
+  private async hydrateFromFirestore() {
+    try {
+      const memSnap = await retryFirestoreOp(() => getDocs(collection(db, MEMORIES_COLLECTION)));
+      if (!memSnap.empty) {
+        memSnap.forEach((docSnap) => {
+          const mem = docSnap.data() as CandidateLongTermMemory;
+          this.memories.set(mem.candidateId, mem);
+        });
+      }
+
+      const propSnap = await retryFirestoreOp(() => getDocs(collection(db, PROPOSALS_COLLECTION)));
+      if (!propSnap.empty) {
+        const list: LearningProposal[] = [];
+        propSnap.forEach((docSnap) => list.push(docSnap.data() as LearningProposal));
+        if (list.length > 0) this.learningProposals = list;
+      }
+
+      const behSnap = await retryFirestoreOp(() => getDocs(collection(db, BEHAVIOR_PROFILES_COLLECTION)));
+      if (!behSnap.empty) {
+        behSnap.forEach((docSnap) => {
+          const beh = docSnap.data() as CandidateMultiCallBehaviorProfile;
+          this.behaviorProfiles.set(beh.candidateId, beh);
+        });
+      }
+    } catch (err) {
+      console.warn('[MemoryRepository] Firestore hydration error:', err);
     }
   }
 
@@ -235,7 +288,7 @@ export class MemoryRepository {
     };
 
     this.memories.set(amitMemory.candidateId, amitMemory);
-    this.persist();
+    this.persistMemory(amitMemory);
   }
 
   public getCandidateMemory(candidateId: string): CandidateLongTermMemory | null {
@@ -249,7 +302,7 @@ export class MemoryRepository {
   public saveCandidateMemory(memory: CandidateLongTermMemory): void {
     memory.lastUpdated = new Date().toISOString();
     this.memories.set(memory.candidateId, memory);
-    this.persist();
+    this.persistMemory(memory);
   }
 
   public createInitialMemoryForCandidate(candidate: {
@@ -283,7 +336,7 @@ export class MemoryRepository {
       markets: { field: 'markets', value: s.gurgaonDubaiExperience?.gurgaon ? ['Gurgaon'] : [], source: 'application_form', timestamp: now, confidence: 0.7, verified: false },
       projects: { field: 'projects', value: [], source: 'application_form', timestamp: now, confidence: 0.5, verified: false },
       developers: { field: 'developers', value: [], source: 'application_form', timestamp: now, confidence: 0.5, verified: false },
-      segments: { field: 'segments', value: ['Luxury Residential'], source: 'application_form', timestamp: now, confidence: 0.7, verified: false },
+      segments: { field: 'segments', value: ['Luxury Residential', 'Ultra-Luxury Residential'], source: 'application_form', timestamp: now, confidence: 0.7, verified: false },
       ticketSizes: { field: 'ticketSizes', value: [], source: 'application_form', timestamp: now, confidence: 0.5, verified: false },
       luxuryExperience: {
         hasLuxury: { field: 'hasLuxury', value: false, source: 'application_form', timestamp: now, confidence: 0.5, verified: false },
@@ -321,7 +374,7 @@ export class MemoryRepository {
     };
 
     this.memories.set(memory.candidateId, memory);
-    this.persist();
+    this.persistMemory(memory);
     return memory;
   }
 
@@ -329,11 +382,10 @@ export class MemoryRepository {
     const id = `audit-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`;
     const fullRecord: MemoryAuditRecord = { ...record, id };
     this.auditTrail.unshift(fullRecord);
-    // Keep max 1000 audit records
     if (this.auditTrail.length > 1000) {
       this.auditTrail = this.auditTrail.slice(0, 1000);
     }
-    saveJsonFile(AUDIT_FILE, this.auditTrail);
+    this.persistAudit(fullRecord);
     return fullRecord;
   }
 
@@ -356,7 +408,7 @@ export class MemoryRepository {
       status: 'PENDING_REVIEW',
     };
     this.learningProposals.unshift(newProposal);
-    saveJsonFile(PROPOSALS_FILE, this.learningProposals);
+    this.persistProposal(newProposal);
     return newProposal;
   }
 
@@ -372,7 +424,7 @@ export class MemoryRepository {
     prop.reviewedBy = reviewedBy;
     prop.reviewedAt = new Date().toISOString();
     if (reviewNotes) prop.reviewNotes = reviewNotes;
-    saveJsonFile(PROPOSALS_FILE, this.learningProposals);
+    this.persistProposal(prop);
     return prop;
   }
 
@@ -428,7 +480,7 @@ export class MemoryRepository {
     
     const aggregated = behaviorAnalyzer.aggregateMultiCallProfile(candidateId, candidateName, summaries);
     this.behaviorProfiles.set(candidateId, aggregated);
-    this.persistBehavior();
+    this.persistBehaviorProfile(aggregated);
     return aggregated;
   }
 
@@ -437,7 +489,7 @@ export class MemoryRepository {
     if (!profile) return false;
     profile.humanReviewFlagged = true;
     profile.humanReviewReason = reason;
-    this.persistBehavior();
+    this.persistBehaviorProfile(profile);
     return true;
   }
 
@@ -446,7 +498,7 @@ export class MemoryRepository {
     if (!profile) return false;
     profile.humanReviewFlagged = false;
     profile.humanReviewReason = undefined;
-    this.persistBehavior();
+    this.persistBehaviorProfile(profile);
     return true;
   }
 
@@ -458,7 +510,6 @@ export class MemoryRepository {
     let corrections = 0;
 
     for (const mem of this.memories.values()) {
-      // Count facts across memory fields
       const countFact = (f?: MemoryFact) => {
         if (f && f.value !== undefined && f.value !== null && f.value !== '') {
           totalFacts++;
@@ -491,13 +542,11 @@ export class MemoryRepository {
       countFact(mem.noticePeriod.days);
       countFact(mem.interviewAvailability.agreedSlot);
 
-      // Contradictions
       for (const c of mem.contradictions) {
         if (c.status === 'PENDING_CLARIFICATION') activeContradictions++;
         else if (c.status === 'RESOLVED') resolvedContradictions++;
       }
 
-      // Corrections
       corrections += mem.corrections.length;
     }
 
@@ -520,8 +569,8 @@ export class MemoryRepository {
       humanReviewPendingCount: pendingHumanReviews,
       systemMemoryLayers: {
         layer1_CurrentConversation: 'Active in-memory call state & turn tracking',
-        layer2_CandidateLongTerm: `${this.memories.size} persistent candidate profiles in repository`,
-        layer3_RoleJdMemory: '3 verified role specifications (Sales Manager, Executive, Pre-Sales)',
+        layer2_CandidateLongTerm: `${this.memories.size} persistent candidate profiles in Firestore`,
+        layer3_RoleJdMemory: '3 verified luxury residential role specifications (Sales Manager, Executive, Corporate Sales)',
         layer4_CompanyKnowledge: 'White Collar Realty verified facts & M3M Urbana Sector 67 context',
         layer5_RecruitmentLearning: `${this.learningProposals.length} system patterns & question performance logs`,
         layer6_HumanFeedback: `${this.auditTrail.length} audit entries & HR reviewer overrides`,
@@ -530,20 +579,86 @@ export class MemoryRepository {
     };
   }
 
-  private persist() {
-    const obj: Record<string, CandidateLongTermMemory> = {};
-    for (const [k, v] of this.memories.entries()) {
-      obj[k] = v;
-    }
-    saveJsonFile(MEMORY_FILE, obj);
+  // Helper to remove undefined values for Firestore
+  private sanitizeForFirestore<T>(data: T): any {
+    return JSON.parse(JSON.stringify(data, (_, v) => (v === undefined ? null : v)));
   }
 
-  private persistBehavior() {
-    const obj: Record<string, CandidateMultiCallBehaviorProfile> = {};
-    for (const [k, v] of this.behaviorProfiles.entries()) {
-      obj[k] = v;
+  // Persistence Helpers
+  private persistMemory(memory: CandidateLongTermMemory) {
+    if (DATABASE_PROVIDER === 'local_json') {
+      const obj: Record<string, CandidateLongTermMemory> = {};
+      for (const [k, v] of this.memories.entries()) obj[k] = v;
+      saveJsonFile(MEMORY_FILE, obj);
     }
-    saveJsonFile(BEHAVIOR_FILE, obj);
+
+    if (DATABASE_PROVIDER === 'firestore') {
+      try {
+        const docRef = doc(db, MEMORIES_COLLECTION, memory.candidateId);
+        const payload = this.sanitizeForFirestore(memory);
+        retryFirestoreOp(() => setDoc(docRef, payload, { merge: true })).catch((e) => {
+          console.warn(`[MemoryRepository] Firestore save memory error for ${memory.candidateId}:`, e);
+        });
+      } catch (err) {
+        console.warn('[MemoryRepository] Firestore save error:', err);
+      }
+    }
+  }
+
+  private persistAudit(record: MemoryAuditRecord) {
+    if (DATABASE_PROVIDER === 'local_json') {
+      saveJsonFile(AUDIT_FILE, this.auditTrail);
+    }
+
+    if (DATABASE_PROVIDER === 'firestore') {
+      try {
+        const docRef = doc(db, AUDIT_COLLECTION, record.id);
+        const payload = this.sanitizeForFirestore(record);
+        retryFirestoreOp(() => setDoc(docRef, payload, { merge: true })).catch((e) => {
+          console.warn('[MemoryRepository] Firestore audit write warning:', e);
+        });
+      } catch (err) {
+        console.warn('[MemoryRepository] Firestore audit error:', err);
+      }
+    }
+  }
+
+  private persistProposal(proposal: LearningProposal) {
+    if (DATABASE_PROVIDER === 'local_json') {
+      saveJsonFile(PROPOSALS_FILE, this.learningProposals);
+    }
+
+    if (DATABASE_PROVIDER === 'firestore') {
+      try {
+        const docRef = doc(db, PROPOSALS_COLLECTION, proposal.id);
+        const payload = this.sanitizeForFirestore(proposal);
+        retryFirestoreOp(() => setDoc(docRef, payload, { merge: true })).catch((e) => {
+          console.warn('[MemoryRepository] Firestore proposal write warning:', e);
+        });
+      } catch (err) {
+        console.warn('[MemoryRepository] Firestore proposal error:', err);
+      }
+    }
+  }
+
+  private persistBehaviorProfile(profile: CandidateMultiCallBehaviorProfile) {
+    if (DATABASE_PROVIDER === 'local_json') {
+      const obj: Record<string, CandidateMultiCallBehaviorProfile> = {};
+      for (const [k, v] of this.behaviorProfiles.entries()) obj[k] = v;
+      saveJsonFile(BEHAVIOR_FILE, obj);
+    }
+
+    if (DATABASE_PROVIDER === 'firestore') {
+      try {
+        const docRef = doc(db, BEHAVIOR_PROFILES_COLLECTION, profile.candidateId);
+        const payload = this.sanitizeForFirestore(profile);
+        retryFirestoreOp(() => setDoc(docRef, payload, { merge: true })).catch((e) => {
+          console.warn(`[MemoryRepository] Firestore save behavior profile error for ${profile.candidateId}:`, e);
+        });
+      } catch (err) {
+        console.warn('[MemoryRepository] Firestore behavior profile error:', err);
+      }
+    }
   }
 }
 

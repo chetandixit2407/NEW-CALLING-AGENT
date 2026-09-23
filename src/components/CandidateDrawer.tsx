@@ -134,7 +134,7 @@ export const CandidateDrawer: React.FC<CandidateDrawerProps> = ({
 
   if (!candidate) return null;
 
-  const s = candidate.screening;
+  const s = candidate.screening || {};
 
   const getStatusBadge = (status: string) => {
     switch (status) {
@@ -655,7 +655,7 @@ export const CandidateDrawer: React.FC<CandidateDrawerProps> = ({
                   <div className="p-2.5 rounded-lg bg-slate-950/60 border border-slate-800">
                     <div className="text-slate-400 text-[10px]">Total Real Estate Exp</div>
                     <div className="text-white font-semibold mt-0.5 flex items-center justify-between">
-                      <span>{candidateMemory?.experience?.totalYears?.value || candidate.screening.totalExperienceYears || 'Pending'} Yrs</span>
+                      <span>{candidateMemory?.experience?.totalYears?.value || candidate.screening?.totalExperienceYears || 'Pending'} Yrs</span>
                       <span className="text-[9px] px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
                         {candidateMemory?.experience?.totalYears?.source || 'verified'}
                       </span>
@@ -675,14 +675,14 @@ export const CandidateDrawer: React.FC<CandidateDrawerProps> = ({
                   <div className="p-2.5 rounded-lg bg-slate-950/60 border border-slate-800">
                     <div className="text-slate-400 text-[10px]">Current & Expected CTC</div>
                     <div className="text-white font-semibold mt-0.5">
-                      {candidateMemory?.compensation?.currentSalary?.value || candidate.screening.currentSalaryLPA || 'Undisclosed'} → {candidateMemory?.compensation?.expectedSalary?.value || candidate.screening.expectedSalaryLPA || 'TBD'}
+                      {candidateMemory?.compensation?.currentSalary?.value || candidate.screening?.currentSalaryLPA || 'Undisclosed'} → {candidateMemory?.compensation?.expectedSalary?.value || candidate.screening?.expectedSalaryLPA || 'TBD'}
                     </div>
                   </div>
 
                   <div className="p-2.5 rounded-lg bg-slate-950/60 border border-slate-800">
                     <div className="text-slate-400 text-[10px]">Notice Period</div>
                     <div className="text-white font-semibold mt-0.5">
-                      {candidateMemory?.noticePeriod?.days?.value !== undefined ? `${candidateMemory.noticePeriod.days.value} Days` : candidate.screening.noticePeriodDays !== undefined ? `${candidate.screening.noticePeriodDays} Days` : '15-30 Days'}
+                      {candidateMemory?.noticePeriod?.days?.value !== undefined ? `${candidateMemory.noticePeriod.days.value} Days` : candidate.screening?.noticePeriodDays !== undefined ? `${candidate.screening.noticePeriodDays} Days` : '15-30 Days'}
                     </div>
                   </div>
                 </div>

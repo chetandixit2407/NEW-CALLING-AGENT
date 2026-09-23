@@ -6,6 +6,20 @@ import {
   QuestionEffectivenessStat,
   ScenarioEffectivenessStat,
 } from '../../src/types';
+import {
+  db,
+  doc,
+  collection,
+  getDocs,
+  setDoc,
+  DATABASE_PROVIDER,
+  retryFirestoreOp,
+} from '../services/firestoreDb';
+
+const CALL_LOGS_COLLECTION = 'call_logs';
+const FEEDBACK_COLLECTION = 'human_feedback';
+const QUESTION_STATS_COLLECTION = 'question_stats';
+const SCENARIO_STATS_COLLECTION = 'scenario_stats';
 
 const DATA_DIR = path.join(process.cwd(), 'data');
 const CONVERSATIONS_FILE = path.join(DATA_DIR, 'conversations_store.json');
@@ -53,7 +67,7 @@ export class ConversationRepository {
     this.initialize();
   }
 
-  private initialize() {
+  private async initialize() {
     const rawConversations = loadJsonFile<Record<string, CallRecord>>(CONVERSATIONS_FILE, {});
     this.conversations = new Map(Object.entries(rawConversations));
     this.humanFeedback = loadJsonFile<HumanFeedbackRecord[]>(FEEDBACK_FILE, this.getDefaultFeedback());
@@ -63,6 +77,33 @@ export class ConversationRepository {
 
     const rawScenarios = loadJsonFile<Record<string, ScenarioEffectivenessStat>>(SCENARIO_STATS_FILE, this.getDefaultScenarioStats());
     this.scenarioStats = new Map(Object.entries(rawScenarios));
+
+    if (DATABASE_PROVIDER === 'firestore') {
+      this.hydrateFromFirestore().catch((err) => {
+        console.warn('[ConversationRepository] Firestore initial hydration warning:', err);
+      });
+    }
+  }
+
+  private async hydrateFromFirestore() {
+    try {
+      const callsSnap = await retryFirestoreOp(() => getDocs(collection(db, CALL_LOGS_COLLECTION)));
+      if (!callsSnap.empty) {
+        callsSnap.forEach((d) => {
+          const call = d.data() as CallRecord;
+          this.conversations.set(call.id, call);
+        });
+      }
+
+      const fbSnap = await retryFirestoreOp(() => getDocs(collection(db, FEEDBACK_COLLECTION)));
+      if (!fbSnap.empty) {
+        const list: HumanFeedbackRecord[] = [];
+        fbSnap.forEach((d) => list.push(d.data() as HumanFeedbackRecord));
+        if (list.length > 0) this.humanFeedback = list;
+      }
+    } catch (err) {
+      console.warn('[ConversationRepository] Firestore hydration error:', err);
+    }
   }
 
   private getDefaultFeedback(): HumanFeedbackRecord[] {
@@ -78,7 +119,7 @@ export class ConversationRepository {
         aiRecommendation: {
           status: 'Interview Scheduled',
           qualification: 'Senior Fit',
-          remark: 'Strong Gurgaon luxury candidate',
+          remark: 'Strong Gurgaon luxury residential candidate',
         },
         humanDecision: {
           status: 'Interview Scheduled',
@@ -94,7 +135,7 @@ export class ConversationRepository {
     return {
       'q-personal-closure': {
         questionId: 'q-personal-closure',
-        questionText: "What was your highest-ticket personal closure in Gurgaon or Dubai?",
+        questionText: "What was your highest-ticket personal closure in Gurgaon or Dubai luxury residential?",
         topic: 'highest_personal_closure',
         roleTarget: 'Sales Manager (Luxury Real Estate)',
         experienceBracket: '4+ Years',
@@ -174,11 +215,25 @@ export class ConversationRepository {
 
   public saveConversation(record: CallRecord): void {
     this.conversations.set(record.id, record);
-    const obj: Record<string, CallRecord> = {};
-    for (const [k, v] of this.conversations.entries()) {
-      obj[k] = v;
+
+    if (DATABASE_PROVIDER === 'local_json') {
+      const obj: Record<string, CallRecord> = {};
+      for (const [k, v] of this.conversations.entries()) {
+        obj[k] = v;
+      }
+      saveJsonFile(CONVERSATIONS_FILE, obj);
     }
-    saveJsonFile(CONVERSATIONS_FILE, obj);
+
+    if (DATABASE_PROVIDER === 'firestore') {
+      try {
+        const docRef = doc(db, CALL_LOGS_COLLECTION, record.id);
+        retryFirestoreOp(() => setDoc(docRef, record, { merge: true })).catch((e) => {
+          console.warn(`[ConversationRepository] Firestore save error for call ${record.id}:`, e);
+        });
+      } catch (err) {
+        console.warn('[ConversationRepository] Firestore call write error:', err);
+      }
+    }
   }
 
   public getConversation(id: string): CallRecord | null {
@@ -203,7 +258,22 @@ export class ConversationRepository {
       timestamp: new Date().toISOString(),
     };
     this.humanFeedback.unshift(record);
-    saveJsonFile(FEEDBACK_FILE, this.humanFeedback);
+
+    if (DATABASE_PROVIDER === 'local_json') {
+      saveJsonFile(FEEDBACK_FILE, this.humanFeedback);
+    }
+
+    if (DATABASE_PROVIDER === 'firestore') {
+      try {
+        const docRef = doc(db, FEEDBACK_COLLECTION, record.id);
+        retryFirestoreOp(() => setDoc(docRef, record, { merge: true })).catch((e) => {
+          console.warn(`[ConversationRepository] Firestore feedback write warning:`, e);
+        });
+      } catch (err) {
+        console.warn('[ConversationRepository] Firestore feedback error:', err);
+      }
+    }
+
     return record;
   }
 
@@ -243,11 +313,24 @@ export class ConversationRepository {
 
     this.questionStats.set(questionId, stat);
     
-    const obj: Record<string, QuestionEffectivenessStat> = {};
-    for (const [k, v] of this.questionStats.entries()) {
-      obj[k] = v;
+    if (DATABASE_PROVIDER === 'local_json') {
+      const obj: Record<string, QuestionEffectivenessStat> = {};
+      for (const [k, v] of this.questionStats.entries()) {
+        obj[k] = v;
+      }
+      saveJsonFile(QUESTION_STATS_FILE, obj);
     }
-    saveJsonFile(QUESTION_STATS_FILE, obj);
+
+    if (DATABASE_PROVIDER === 'firestore') {
+      try {
+        const docRef = doc(db, QUESTION_STATS_COLLECTION, stat.questionId);
+        retryFirestoreOp(() => setDoc(docRef, stat, { merge: true })).catch((e) => {
+          console.warn('[ConversationRepository] Firestore question stat write warning:', e);
+        });
+      } catch (err) {
+        console.warn('[ConversationRepository] Firestore question stat error:', err);
+      }
+    }
   }
 
   public getAllQuestionStats(): QuestionEffectivenessStat[] {

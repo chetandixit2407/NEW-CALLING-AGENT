@@ -5,7 +5,20 @@ import {
   BehaviorTrend,
   RealTimeBehaviorState,
 } from '../../src/types';
+import {
+  db,
+  doc,
+  collection,
+  getDocs,
+  setDoc,
+  query,
+  where,
+  orderBy,
+  DATABASE_PROVIDER,
+  retryFirestoreOp,
+} from '../services/firestoreDb';
 
+const BEHAVIOR_REPORTS_COLLECTION = 'behavior_reports';
 const DATA_DIR = path.join(process.cwd(), 'data');
 const BEHAVIOR_FILE = path.join(DATA_DIR, 'candidate_behaviors.json');
 
@@ -42,20 +55,44 @@ function saveJsonFile<T>(filePath: string, data: T): void {
 export class BehaviorRepository {
   // candidateId -> Array of behavior reports across calls
   private behaviorHistory: Map<string, CandidateBehaviorReport[]> = new Map();
-  // active callId -> latest real-time turn state
+  // active callId -> latest real-time turn state (pure in-memory for zero audio latency)
   private activeCallStates: Map<string, RealTimeBehaviorState> = new Map();
 
   constructor() {
     this.initialize();
   }
 
-  private initialize() {
+  private async initialize() {
     const rawData = loadJsonFile<Record<string, CandidateBehaviorReport[]>>(BEHAVIOR_FILE, {});
     this.behaviorHistory = new Map(Object.entries(rawData));
 
-    // If empty, seed initial behavior profile for Amit Sharma (cand-001)
+    // If empty, seed initial behavior profile
     if (this.behaviorHistory.size === 0) {
       this.seedInitialBehaviors();
+    }
+
+    if (DATABASE_PROVIDER === 'firestore') {
+      this.hydrateFromFirestore().catch((err) => {
+        console.warn('[BehaviorRepository] Firestore hydration warning:', err);
+      });
+    }
+  }
+
+  private async hydrateFromFirestore() {
+    try {
+      const snap = await retryFirestoreOp(() => getDocs(collection(db, BEHAVIOR_REPORTS_COLLECTION)));
+      if (!snap.empty) {
+        snap.forEach((d) => {
+          const rep = d.data() as CandidateBehaviorReport;
+          const existing = this.behaviorHistory.get(rep.candidateId) || [];
+          if (!existing.some((r) => r.id === rep.id)) {
+            existing.push(rep);
+            this.behaviorHistory.set(rep.candidateId, existing);
+          }
+        });
+      }
+    } catch (err) {
+      console.warn('[BehaviorRepository] Firestore hydrate error:', err);
     }
   }
 
@@ -222,7 +259,6 @@ export class BehaviorRepository {
       ],
     };
 
-    // Candidate 2: Ananya Verma (Enthusiastic, consultative, high cooperation)
     const seedAnanya: CandidateBehaviorReport = {
       id: 'beh-seed-002',
       candidateId: 'cand-2',
@@ -355,201 +391,13 @@ export class BehaviorRepository {
       ],
     };
 
-    // Candidate 1: Rohan Sharma (Direct, concise, professional)
-    const seedRohan: CandidateBehaviorReport = {
-      id: 'beh-seed-001-rohan',
-      candidateId: 'cand-1',
-      candidateName: 'Rohan Sharma',
-      conversationId: 'CALL-PREV-01',
-      timestamp: now,
-      confidence: 0.92,
-      communicationStyle: {
-        primaryTone: 'direct',
-        secondaryTones: ['professional', 'brief'],
-        summary: 'Candidate communicates in a brief, concise, and business-focused manner. Focuses quickly on essential numbers and inventory tiers.',
-        isBrief: true,
-        isDetailed: false,
-      },
-      interactionBehavior: {
-        politeness: 'polite',
-        respectfulness: 'respectful',
-        cooperation: 'COOPERATIVE',
-        patience: 'listens fully',
-      },
-      engagement: {
-        level: 'MEDIUM',
-        rationale: 'Focused primarily on luxury ticket sizes on Golf Course Road and immediate compensation expectations.',
-        interestSignals: ['Inquired about Golf Course Road inventory tiers'],
-        concernSignals: [],
-      },
-      conversationSignals: {
-        listeningResponseQuality: 'EVIDENCE_BASED',
-        confidenceSignals: 'CLEARLY_ARTICULATED',
-        answerOwnership: 'Direct ownership of past residential sales closures',
-        accountabilitySignals: 'Clear timeline on notice period',
-        interruptions: {
-          frequency: 'no interruptions',
-          classification: 'none',
-          count: 0,
-          notes: 'Listened attentively to recruiter prompts',
-        },
-        impatience: { level: 'NONE', evidence: [] },
-        frustrationSignals: { detected: false, evidence: [] },
-        aggressiveLanguage: { detected: false, severity: 'none', evidence: [], count: 0 },
-      },
-      scenarioBehavior: [],
-      behaviorTimeline: [
-        { stage: 'opening', tone: 'polite', engagement: 'medium', observation: 'Brief greeting and confirmed readiness' },
-        { stage: 'screening', tone: 'direct', engagement: 'high', observation: 'Succinct summary of DLF luxury sales history' },
-      ],
-      evidence: [
-        {
-          dimension: 'communicationStyle',
-          observation: 'Candidate gives short, high-value responses without filler',
-          evidence: '"Yes, 6 years in Gurgaon luxury market with DLF and Central Park portfolios."',
-          timestamp: now,
-          conversationId: 'CALL-PREV-01',
-          confidence: 0.91,
-          source: 'transcript',
-        },
-      ],
-      candidatePreferences: {
-        language: 'English',
-        responseStyle: 'brief',
-        preferredTime: 'morning',
-        communicationPreference: 'direct',
-      },
-      behaviorTrend: {
-        trend: 'STABLE',
-        historicalCallCount: 1,
-        trendDescription: 'Consistent concise, high-efficiency conversational style.',
-      },
-      adaptiveRecommendations: {
-        recommendedAgentPacing: 'concise_questions',
-        guidance: 'Candidate is brief and numbers-driven. Keep recruiter questions concise and avoid long preambles.',
-      },
-      behaviorScore: {
-        communication: { clarity: 5, responsiveness: 4, engagement: 4 },
-        interaction: { politeness: 5, respectfulness: 5, cooperation: 4, patience: 4 },
-        conversation: { interruptions: 5, topic_drift: 5, answer_relevance: 5 },
-      },
-      humanReviewRequired: false,
-      humanReviewReasons: [],
-      limitations: [
-        'Observable communication behavior only. No personality or psychological diagnosis.',
-      ],
-    };
-
-    // Candidate 3: Vikram Malhotra (Flagged for Recruiter Review - Defensive tone around previous employer exit)
-    const seedVikram: CandidateBehaviorReport = {
-      id: 'beh-seed-003',
-      candidateId: 'cand-3',
-      candidateName: 'Vikram Malhotra',
-      conversationId: 'CALL-PREV-03',
-      timestamp: now,
-      confidence: 0.88,
-      communicationStyle: {
-        primaryTone: 'direct',
-        secondaryTones: ['reserved', 'brief'],
-        summary: 'Candidate showed verbal reluctance and mild defensiveness when questioned about leaving prior real estate firm, but cooperative on scheduling.',
-        isBrief: true,
-        isDetailed: false,
-      },
-      interactionBehavior: {
-        politeness: 'neutral',
-        respectfulness: 'respectful',
-        cooperation: 'COOPERATIVE',
-        patience: 'becomes impatient during detailed questions',
-      },
-      engagement: {
-        level: 'MEDIUM',
-        rationale: 'Answered role qualification promptly, but exhibited hesitation and abrupt tone during verification of past tenure.',
-        interestSignals: ['Interested in commercial sales division at Sector 67'],
-        concernSignals: ['Expressed irritation when asked about gap between roles'],
-      },
-      conversationSignals: {
-        listeningResponseQuality: 'PARTIAL',
-        confidenceSignals: 'MODERATELY_CLEAR',
-        answerOwnership: 'Attributed previous team target miss to market conditions rather than pipeline execution',
-        accountabilitySignals: 'Deflected question about tenure gap to general industry layoffs',
-        interruptions: {
-          frequency: 'occasional interruption',
-          classification: 'problematic interruption',
-          count: 2,
-          notes: 'Interrupted recruiter twice during background verification inquiries',
-        },
-        impatience: {
-          level: 'TEMPORARY_IMPATIENCE',
-          evidence: ['"Can we just skip to the package details instead of digging into the old company?"'],
-        },
-        frustrationSignals: {
-          detected: true,
-          evidence: ['Short sigh detected before answering question about past employer exit'],
-        },
-        aggressiveLanguage: {
-          detected: false,
-          severity: 'none',
-          evidence: [],
-          count: 0,
-        },
-      },
-      scenarioBehavior: [],
-      behaviorTimeline: [
-        { stage: 'opening', tone: 'neutral', engagement: 'medium', observation: 'Answered call curtly' },
-        { stage: 'screening', tone: 'reluctant', engagement: 'low', observation: 'Defensive about past employer separation' },
-        { stage: 'interview_scheduling', tone: 'polite', engagement: 'medium', observation: 'Accepted face-to-face slot' },
-      ],
-      evidence: [
-        {
-          dimension: 'impatience',
-          observation: 'Candidate requested skipping tenure qualification inquiries',
-          evidence: '"Can we just skip to the package details instead of digging into the old company?"',
-          timestamp: now,
-          conversationId: 'CALL-PREV-03',
-          confidence: 0.92,
-          source: 'transcript',
-        },
-      ],
-      candidatePreferences: {
-        language: 'Hindi',
-        responseStyle: 'brief',
-        preferredTime: 'evening',
-        communicationPreference: 'direct',
-      },
-      behaviorTrend: {
-        trend: 'DECLINING',
-        historicalCallCount: 1,
-        trendDescription: 'Showed defensiveness regarding tenure verification; recruiter should probe gently in F2F round.',
-      },
-      adaptiveRecommendations: {
-        recommendedAgentPacing: 'shorter_turns',
-        guidance: 'Acknowledge candidate time pressures warmly; avoid confrontational cross-examination. De-escalate and focus on forward-looking role goals.',
-      },
-      behaviorScore: {
-        communication: { clarity: 4, responsiveness: 3, engagement: 3 },
-        interaction: { politeness: 3, respectfulness: 4, cooperation: 3, patience: 2 },
-        conversation: { interruptions: 3, topic_drift: 4, answer_relevance: 4 },
-      },
-      humanReviewRequired: true,
-      humanReviewReasons: [
-        'Observable verbal defensiveness and mild impatience during past tenure inquiry',
-        '2 interruptions noted during background validation phase',
-      ],
-      limitations: [
-        'Observable behavioral indicators only. Not a measure of candidate integrity or psychological personality.',
-      ],
-    };
-
     this.saveBehaviorReport(seedAmit);
     this.saveBehaviorReport(seedAnanya);
-    this.saveBehaviorReport(seedRohan);
-    this.saveBehaviorReport(seedVikram);
   }
 
   public getCandidateBehaviorHistory(candidateId: string): CandidateBehaviorReport[] {
     let list = this.behaviorHistory.get(candidateId);
     if (!list || list.length === 0) {
-      // Fallback aliases if cand-001 vs cand-1
       if (candidateId === 'cand-1') list = this.behaviorHistory.get('cand-001');
       else if (candidateId === 'cand-001') list = this.behaviorHistory.get('cand-1');
     }
@@ -567,14 +415,29 @@ export class BehaviorRepository {
     existing.push(report);
     this.behaviorHistory.set(report.candidateId, existing);
 
-    const obj: Record<string, CandidateBehaviorReport[]> = {};
-    for (const [k, v] of this.behaviorHistory.entries()) {
-      obj[k] = v;
+    if (DATABASE_PROVIDER === 'local_json') {
+      const obj: Record<string, CandidateBehaviorReport[]> = {};
+      for (const [k, v] of this.behaviorHistory.entries()) {
+        obj[k] = v;
+      }
+      saveJsonFile(BEHAVIOR_FILE, obj);
     }
-    saveJsonFile(BEHAVIOR_FILE, obj);
+
+    if (DATABASE_PROVIDER === 'firestore') {
+      try {
+        const docRef = doc(db, BEHAVIOR_REPORTS_COLLECTION, report.id);
+        const payload = JSON.parse(JSON.stringify(report, (_, v) => (v === undefined ? null : v)));
+        retryFirestoreOp(() => setDoc(docRef, payload, { merge: true })).catch((e) => {
+          console.warn(`[BehaviorRepository] Firestore save report error ${report.id}:`, e);
+        });
+      } catch (err) {
+        console.warn('[BehaviorRepository] Firestore save error:', err);
+      }
+    }
   }
 
   public updateActiveCallState(callId: string, state: RealTimeBehaviorState): void {
+    // Pure in-memory update for live call audio performance
     this.activeCallStates.set(callId, state);
   }
 
@@ -603,7 +466,6 @@ export class BehaviorRepository {
       };
     }
 
-    // Compare engagement and cooperation over calls
     const recent = history.slice(-3);
     const engagementScores = recent.map((r) => {
       if (r.engagement.level === 'HIGH') return 3;

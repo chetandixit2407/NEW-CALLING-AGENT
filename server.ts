@@ -16,6 +16,11 @@ import {
 } from './src/utils/questionStateEngine';
 import { QuestionStateEngine, AskedQuestionRecord } from './src/types';
 import { aiHrBrain } from './server/ai/hrBrain';
+import { candidateRepository } from './server/repositories/candidateRepository';
+import { interviewSlotRepository } from './server/repositories/interviewSlotRepository';
+import { followupRepository } from './server/repositories/followupRepository';
+import { runJsonToFirestoreMigration } from './server/scripts/migrateJsonToFirestore';
+import { callingQueueManager } from './server/automation/callingQueue';
 
 dotenv.config();
 
@@ -125,61 +130,61 @@ interface RoleJDInfo {
 const WHITE_COLLAR_JDS: Record<string, RoleJDInfo> = {
   sales_manager: {
     title: 'Sales Manager (Luxury Real Estate)',
-    department: 'Luxury Residential & Commercial Sales (Gurgaon & Dubai)',
+    department: 'Luxury & Ultra-Luxury Residential Sales (Gurgaon & Dubai)',
     location: '6th floor, TOWER-A, M3M Urbana Business Park, Sector 67, Gurugram, Haryana 122101',
     minExperienceYears: 4,
     minRealEstateExpYears: 3,
     fixedBudget: '14 - 22 LPA fixed',
     totalOte: '25 - 35 LPA OTE with luxury closings',
     seniority: 'Leadership / Squad Head',
-    marketFocus: 'Gurgaon Luxury Corridors (Golf Course Ext, SPR, Dwarka Expressway) & Dubai Freehold',
+    marketFocus: 'Gurgaon Luxury Corridors (Golf Course Ext, SPR, Dwarka Expressway) & Dubai Luxury Freehold',
     noticePeriodExpectation: 'Immediate to 30 days max',
     responsibilities: [
-      'Lead and mentor a high-performing squad of 8 to 15 Property Consultants',
-      'Drive monthly gross booking targets of ₹15–30 Cr across DLF, M3M, Godrej, Emaar, and Sobha inventories',
-      'Conduct high-ticket negotiations and closing meetings with HNIs and NRI investors',
-      'Facilitate client investment roadshows for Dubai off-plan luxury projects',
+      'Lead and mentor a high-performing squad of 8 to 15 Property Consultants specializing in luxury residential assets',
+      'Drive monthly gross booking targets of ₹15–30 Cr across DLF, M3M, Godrej, Emaar, and Sobha luxury residential inventories',
+      'Conduct high-ticket negotiations and closing meetings with HNIs and NRI investors for ultra-luxury penthouses and apartments',
+      'Facilitate client investment roadshows for Dubai off-plan luxury freehold developments',
     ],
     requiredSkills: [
       'Team Leadership & Squad Target Accountability',
-      'High-Ticket Real Estate Negotiation & Closing',
+      'High-Ticket Luxury Residential Real Estate Negotiation & Closing',
       'Gurugram Circle Rates, RERA & Dubai Freehold Regulations',
-      'HNI & Corporate Network in Delhi NCR',
+      'HNI & Ultra-HNI Network in Delhi NCR',
     ],
     roleSpecificQuestions: [
-      'How large was the sales team you were managing in your last role?',
-      'Were you personally accountable for monthly squad targets, and what was your run-rate?',
-      'Which Gurgaon luxury developer projects or Dubai portfolios have you actively closed?',
-      'What has been your average ticket size and closing conversion ratio?',
+      'How large was the sales team you were managing in your last luxury real estate role?',
+      'Were you personally accountable for monthly squad targets, and what was your run-rate in luxury residential?',
+      'Which Gurgaon luxury residential developer projects (e.g. DLF Camellias, M3M Golfestate) or Dubai luxury portfolios have you actively closed?',
+      'What has been your highest-ticket personal closure and closing conversion ratio?',
     ],
   },
   property_consultant: {
     title: 'Property Consultant / Senior Property Consultant',
-    department: 'Direct Sales & HNI Client Advisory',
+    department: 'Luxury & Ultra-Luxury Residential Advisory',
     location: '6th floor, TOWER-A, M3M Urbana Business Park, Sector 67, Gurugram, Haryana 122101',
     minExperienceYears: 2,
     minRealEstateExpYears: 1.5,
     fixedBudget: '10 - 16 LPA fixed',
     totalOte: '18 - 25 LPA OTE with direct transaction commissions',
     seniority: 'Property Consultant / Specialist',
-    marketFocus: 'Gurugram Primary Luxury Residential & High-Street Commercial Corridors',
+    marketFocus: 'Gurugram Primary Luxury & Ultra-Luxury Residential Corridors (Golf Course Ext, SPR, Dwarka Expressway)',
     noticePeriodExpectation: 'Immediate to 30 days',
     responsibilities: [
-      'Manage end-to-end buyer journey from qualified lead engagement to site visit and booking',
-      'Present luxury residential layouts (₹2 Cr – ₹15 Cr+) and commercial retail assets to clients',
-      'Coordinate site visits at M3M, DLF, SmartWorld, and Elan sites across Gurugram',
+      'Manage end-to-end buyer journey from qualified HNI lead engagement to site visit and booking in luxury residential projects',
+      'Present luxury residential layouts (₹3 Cr – ₹18 Cr+) and high-end condominium assets to clients',
+      'Coordinate personalized site visits at M3M, DLF, SmartWorld, and Godrej luxury residential sites across Gurugram',
       'Negotiate terms and facilitate booking documentation per developer guidelines',
     ],
     requiredSkills: [
-      'Consultative Property Selling & Lead Conversion',
+      'Consultative Luxury Property Selling & Lead Conversion',
       'Gurugram Micro-Market & Infrastructure Understanding',
-      'Relationship Building with HNI Buyers',
+      'Relationship Building with HNI & Ultra-HNI Buyers',
       'Fluent Spoken English & Corporate Communication',
     ],
     roleSpecificQuestions: [
-      'How many years have you been handling direct real estate property sales in Gurgaon?',
-      'What category of properties (Luxury Residential, Plots, or Commercial) have you primarily closed?',
-      'What has been your typical monthly lead-to-site-visit and booking conversion rate?',
+      'How many years have you been handling direct luxury residential property sales in Gurgaon?',
+      'Which luxury residential developer projects have you primarily closed in Golf Course Ext or SPR?',
+      'What has been your typical monthly lead-to-site-visit and booking conversion rate for high-ticket residences?',
       'Have you closed any deals in Golf Course Extension Road or SPR in the last 6 months?',
     ],
   },
@@ -2936,6 +2941,271 @@ app.post('/api/brain/behavior/analyze-turn', (req, res) => {
     return res.json(realTimeState);
   } catch (err: any) {
     console.error('Error analyzing candidate turn:', err);
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// ==========================================
+// CANDIDATE REPOSITORY & CALLING LOCK REST API
+// ==========================================
+
+// Acquire Calling Lock before initiating an AI or Vapi call (Rule 16)
+app.post('/api/candidate/:id/lock', async (req, res) => {
+  try {
+    const { callId, timeoutMinutes } = req.body;
+    const candidateId = req.params.id;
+    const lockResult = await candidateRepository.acquireCallingLock(
+      candidateId,
+      callId || `call-${Date.now()}`,
+      timeoutMinutes || 10
+    );
+    return res.json(lockResult);
+  } catch (err: any) {
+    console.error('Error acquiring calling lock:', err);
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// Release Calling Lock after call completion or termination
+app.post('/api/candidate/:id/unlock', async (req, res) => {
+  try {
+    const { callId } = req.body;
+    const candidateId = req.params.id;
+    const success = await candidateRepository.releaseCallingLock(candidateId, callId);
+    return res.json({ success });
+  } catch (err: any) {
+    console.error('Error releasing calling lock:', err);
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// Get Candidate by ID
+app.get('/api/candidate/:id', async (req, res) => {
+  try {
+    const candidate = await candidateRepository.getCandidate(req.params.id);
+    if (!candidate) {
+      return res.status(404).json({ error: 'Candidate not found' });
+    }
+    return res.json(candidate);
+  } catch (err: any) {
+    console.error('Error fetching candidate:', err);
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// Update Candidate
+app.patch('/api/candidate/:id', async (req, res) => {
+  try {
+    const updated = await candidateRepository.updateCandidate(req.params.id, req.body);
+    if (!updated) {
+      return res.status(404).json({ error: 'Candidate not found' });
+    }
+    return res.json(updated);
+  } catch (err: any) {
+    console.error('Error updating candidate:', err);
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// ==========================================
+// INTERVIEW SLOTS TRANSACTION REST API
+// ==========================================
+
+// Get all interview slots
+app.get('/api/slots', async (req, res) => {
+  try {
+    const slots = await interviewSlotRepository.getAllSlots();
+    return res.json(slots);
+  } catch (err: any) {
+    console.error('Error fetching slots:', err);
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// Book Slot with Concurrency / Double-booking protection (Step 8 & 14)
+app.post('/api/slots/book', async (req, res) => {
+  try {
+    const { slotId, candidateId, candidateName } = req.body;
+    if (!slotId || !candidateId) {
+      return res.status(400).json({ error: 'slotId and candidateId are required' });
+    }
+    const result = await interviewSlotRepository.bookSlot(slotId, candidateId, candidateName || 'Candidate');
+    return res.json(result);
+  } catch (err: any) {
+    console.error('Error booking slot:', err);
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// Release Slot
+app.post('/api/slots/release', async (req, res) => {
+  try {
+    const { slotId, candidateId } = req.body;
+    if (!slotId) {
+      return res.status(400).json({ error: 'slotId is required' });
+    }
+    const success = await interviewSlotRepository.releaseSlot(slotId, candidateId);
+    return res.json({ success });
+  } catch (err: any) {
+    console.error('Error releasing slot:', err);
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// ==========================================
+// FOLLOWUPS REST API
+// ==========================================
+
+app.get('/api/followups/pending', async (req, res) => {
+  try {
+    const pending = await followupRepository.getPendingFollowups();
+    return res.json(pending);
+  } catch (err: any) {
+    console.error('Error fetching pending followups:', err);
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/followups', async (req, res) => {
+  try {
+    const created = await followupRepository.createFollowup(req.body);
+    return res.json(created);
+  } catch (err: any) {
+    console.error('Error creating followup:', err);
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// ==========================================
+// ADMIN FIRESTORE MIGRATION REST API
+// ==========================================
+
+app.post('/api/admin/migrate-to-firestore', async (req, res) => {
+  try {
+    const summary = await runJsonToFirestoreMigration();
+    return res.json({
+      success: summary.errors.length === 0,
+      summary,
+    });
+  } catch (err: any) {
+    console.error('Migration error:', err);
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// ==========================================
+// AUTOMATED AI HR CALLING QUEUE REST API
+// ==========================================
+
+app.get('/api/automation/status', async (req, res) => {
+  try {
+    const status = callingQueueManager.getStatus();
+    return res.json(status);
+  } catch (err: any) {
+    console.error('Error fetching automation status:', err);
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/automation/settings', async (req, res) => {
+  try {
+    const settings = await callingQueueManager.loadSettings();
+    return res.json(settings);
+  } catch (err: any) {
+    console.error('Error loading automation settings:', err);
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/automation/settings', async (req, res) => {
+  try {
+    const updated = await callingQueueManager.updateSettings(req.body);
+    return res.json(updated);
+  } catch (err: any) {
+    console.error('Error updating automation settings:', err);
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/automation/queue', async (req, res) => {
+  try {
+    const queue = await callingQueueManager.getQueue();
+    return res.json(queue);
+  } catch (err: any) {
+    console.error('Error reading queue:', err);
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/automation/stats', async (req, res) => {
+  try {
+    const stats = await callingQueueManager.loadDailyStats();
+    return res.json(stats);
+  } catch (err: any) {
+    console.error('Error fetching daily stats:', err);
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/automation/start', async (req, res) => {
+  try {
+    const forceEnable = Boolean(req.body.forceEnable);
+    const result = await callingQueueManager.startAutomation(forceEnable);
+    return res.json(result);
+  } catch (err: any) {
+    console.error('Error starting automation:', err);
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/automation/stop', async (req, res) => {
+  try {
+    const result = await callingQueueManager.stopAutomation();
+    return res.json(result);
+  } catch (err: any) {
+    console.error('Error stopping automation:', err);
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/automation/pause', async (req, res) => {
+  try {
+    const result = await callingQueueManager.pauseAutomation();
+    return res.json(result);
+  } catch (err: any) {
+    console.error('Error pausing automation:', err);
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/automation/resume', async (req, res) => {
+  try {
+    const result = await callingQueueManager.resumeAutomation();
+    return res.json(result);
+  } catch (err: any) {
+    console.error('Error resuming automation:', err);
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/automation/populate', async (req, res) => {
+  try {
+    const ignoreTimeWindow = Boolean(req.body.ignoreTimeWindow);
+    const result = await callingQueueManager.populateQueueFromEligibleCandidates({ ignoreTimeWindow });
+    return res.json(result);
+  } catch (err: any) {
+    console.error('Error populating queue:', err);
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/automation/run-dry-test', async (req, res) => {
+  try {
+    const limitCount = typeof req.body.limit === 'number' ? req.body.limit : 5;
+    const result = await callingQueueManager.runDryTest(limitCount);
+    return res.json(result);
+  } catch (err: any) {
+    console.error('Error executing dry test:', err);
     return res.status(500).json({ error: err.message });
   }
 });

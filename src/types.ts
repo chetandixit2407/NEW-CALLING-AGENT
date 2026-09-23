@@ -13,7 +13,13 @@ export type CandidateStatus =
   | 'Attendance Confirmed'
   | 'Missed Interview - Followup'
   | 'Callback Needed'
-  | 'Declined - Do Not Call';
+  | 'Declined - Do Not Call'
+  | 'Unanswered - Retry Scheduled'
+  | 'Busy - Retry Scheduled'
+  | 'Max Attempts Exceeded'
+  | 'Rejected - Not Qualified'
+  | 'Under Review'
+  | string;
 
 export type InterviewStatus = 
   | 'Not Scheduled' 
@@ -101,7 +107,13 @@ export interface Candidate {
   phone: string;
   email: string;
   appliedRole: string;
+  appliedDate?: string;
   status: CandidateStatus;
+  priority?: 'HIGH' | 'MEDIUM' | 'LOW' | 'Urgent' | 'High' | 'Medium' | 'Low' | string;
+  doNotCall?: boolean;
+  isCalling?: boolean;
+  callStartedAt?: string;
+  lastCallAt?: string;
   screening: ScreeningData;
   interviewSlotId?: string;
   interviewDate?: string;

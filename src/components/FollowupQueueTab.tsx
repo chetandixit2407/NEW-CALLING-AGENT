@@ -255,7 +255,7 @@ export const FollowupQueueTab: React.FC<FollowupQueueTabProps> = ({
                   </div>
 
                   <div className="mt-3 p-2.5 rounded-lg bg-rose-950/20 border border-rose-500/20 text-xs text-rose-200">
-                    <strong className="text-rose-300">Missed Slot:</strong> {cand.screening.preferredInterviewSlot || 'Yesterday'}
+                    <strong className="text-rose-300">Missed Slot:</strong> {cand.screening?.preferredInterviewSlot || 'Yesterday'}
                     <div className="text-[11px] text-slate-300 mt-1">
                       {cand.notes || 'Automated follow-up required to check availability and propose open slots.'}
                     </div>

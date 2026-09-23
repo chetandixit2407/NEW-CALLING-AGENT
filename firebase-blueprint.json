@@ -17,17 +17,21 @@
     },
     "Candidate": {
       "title": "Candidate",
-      "description": "Screened real estate candidate for White Collar Realty Gurgaon sales advisory roles.",
+      "description": "Screened real estate candidate for White Collar Realty Gurgaon luxury & ultra-luxury residential sales advisory roles.",
       "type": "object",
       "properties": {
         "id": { "type": "string", "description": "Candidate unique ID" },
         "name": { "type": "string", "description": "Candidate full name" },
         "phone": { "type": "string", "description": "Contact mobile number" },
         "email": { "type": "string", "description": "Candidate email address" },
-        "appliedRole": { "type": "string", "description": "Applied role (e.g. Sales Executive Luxury Residential)" },
+        "appliedRole": { "type": "string", "description": "Applied role (e.g. Sales Manager Luxury Real Estate)" },
         "status": { "type": "string", "description": "Recruitment pipeline status" },
         "priority": { "type": "string", "enum": ["HIGH", "MEDIUM", "LOW"], "description": "Recruiter prioritization level" },
         "appliedDate": { "type": "string", "description": "Application date" },
+        "isCalling": { "type": "boolean", "description": "Calling lock flag preventing simultaneous outbound calls" },
+        "activeCallId": { "type": "string", "description": "ID of currently active call session" },
+        "callStartedAt": { "type": "string", "description": "Timestamp when calling lock was acquired" },
+        "callEndedAt": { "type": "string", "description": "Timestamp when calling lock was released" },
         "unansweredAttempts": { "type": "number", "description": "Count of unanswered call attempts" },
         "interviewSlotId": { "type": "string", "description": "Booked interview slot reference" },
         "interviewDate": { "type": "string", "description": "Scheduled interview date" },
@@ -62,30 +66,65 @@
         "displayLabel": { "type": "string", "description": "Human readable slot label" },
         "status": { "type": "string", "enum": ["Available", "Booked", "Completed", "Cancelled"], "description": "Slot availability" },
         "isAvailable": { "type": "boolean", "description": "Availability flag" },
-        "candidateId": { "type": "string", "description": "Associated candidate ID if booked" },
-        "candidateName": { "type": "string", "description": "Associated candidate name if booked" },
-        "recruiterName": { "type": "string", "description": "Interviewer name" },
+        "maxCapacity": { "type": "number", "description": "Maximum concurrent candidates per slot" },
+        "bookedCount": { "type": "number", "description": "Current number of booked candidates" },
+        "bookedCandidateId": { "type": "string", "description": "Associated candidate ID if booked" },
+        "bookedCandidateName": { "type": "string", "description": "Associated candidate name if booked" },
         "venue": { "type": "string", "description": "Interview venue address" }
       },
-      "required": ["id", "date", "time", "status"]
+      "required": ["id", "date", "time", "isAvailable"]
     },
     "CallLog": {
       "title": "CallLog",
-      "description": "Conversation log and voice recording session transcript with Gemini Live or Vapi.",
+      "description": "Conversation log, full transcript, scorecard, and post-call analytics.",
       "type": "object",
       "properties": {
         "id": { "type": "string", "description": "Call log unique identifier" },
         "candidateId": { "type": "string", "description": "Candidate ID" },
         "candidateName": { "type": "string", "description": "Candidate name" },
         "scenario": { "type": "string", "description": "Screening scenario type" },
-        "startedAt": { "type": "string", "format": "date-time", "description": "Call start timestamp" },
+        "timestamp": { "type": "string", "format": "date-time", "description": "Call start timestamp" },
         "durationSeconds": { "type": "number", "description": "Duration of call in seconds" },
-        "outcome": { "type": "string", "description": "Outcome of screening call" },
-        "modelUsed": { "type": "string", "description": "Model used (gemini-3.8-live, Vapi)" },
-        "transcriptsCount": { "type": "number", "description": "Number of conversation turns" },
-        "updatedAt": { "type": "string", "format": "date-time", "description": "Log timestamp" }
+        "summary": { "type": "string", "description": "Factual conversation summary" },
+        "outcome": { "type": "string", "description": "Outcome of screening call" }
       },
-      "required": ["id", "candidateId", "startedAt"]
+      "required": ["id", "candidateId", "timestamp"]
+    },
+    "CandidateLongTermMemory": {
+      "title": "CandidateLongTermMemory",
+      "description": "Single persistent source of learned candidate facts across multiple calls.",
+      "type": "object",
+      "properties": {
+        "candidateId": { "type": "string", "description": "Unique Candidate ID" },
+        "candidateName": { "type": "string", "description": "Candidate name" },
+        "lastUpdated": { "type": "string", "description": "Last update timestamp" }
+      },
+      "required": ["candidateId", "candidateName"]
+    },
+    "CandidateBehaviorReport": {
+      "title": "CandidateBehaviorReport",
+      "description": "Observable communication style, engagement, and conversational signals report.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Report ID" },
+        "candidateId": { "type": "string", "description": "Candidate ID" },
+        "timestamp": { "type": "string", "description": "Report generation timestamp" },
+        "humanReviewRequired": { "type": "boolean", "description": "Flag indicating human HR review needed" }
+      },
+      "required": ["id", "candidateId", "timestamp"]
+    },
+    "FollowupRecord": {
+      "title": "FollowupRecord",
+      "description": "Scheduled recruiter or AI agent follow-up task.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Followup task ID" },
+        "candidateId": { "type": "string", "description": "Candidate ID" },
+        "type": { "type": "string", "description": "Type of followup" },
+        "scheduledAt": { "type": "string", "description": "Due timestamp" },
+        "status": { "type": "string", "enum": ["PENDING", "IN_PROGRESS", "COMPLETED", "CANCELLED"], "description": "Task status" }
+      },
+      "required": ["id", "candidateId", "type", "scheduledAt", "status"]
     }
   },
   "firestore": {
@@ -104,6 +143,42 @@
     "/call_logs/{callId}": {
       "schema": "CallLog",
       "description": "Historical voice call transcripts, outcomes, and screening logs."
+    },
+    "/candidate_memories/{candidateId}": {
+      "schema": "CandidateLongTermMemory",
+      "description": "Cross-call memory and extracted fact repository for candidate."
+    },
+    "/behavior_reports/{reportId}": {
+      "schema": "CandidateBehaviorReport",
+      "description": "Individual call communication behavior and conversational signals."
+    },
+    "/behavior_profiles/{candidateId}": {
+      "schema": "CandidateBehaviorReport",
+      "description": "Aggregated multi-call behavior profile."
+    },
+    "/learning_proposals/{proposalId}": {
+      "schema": "User",
+      "description": "System-wide recruitment optimization learning proposals."
+    },
+    "/human_feedback/{feedbackId}": {
+      "schema": "User",
+      "description": "Recruiter overrides and human decision logs."
+    },
+    "/memory_audit_trail/{auditId}": {
+      "schema": "User",
+      "description": "Provenance audit log for all candidate memory field mutations."
+    },
+    "/question_stats/{statId}": {
+      "schema": "User",
+      "description": "Effectiveness statistics for screening questions."
+    },
+    "/scenario_stats/{statId}": {
+      "schema": "User",
+      "description": "Effectiveness statistics for sales scenarios."
+    },
+    "/followups/{followupId}": {
+      "schema": "FollowupRecord",
+      "description": "Scheduled recruitment follow-up queue."
     }
   }
 }
