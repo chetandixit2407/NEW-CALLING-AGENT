@@ -116,6 +116,15 @@ export interface Candidate {
   callbackTime?: string;
   declineReason?: string;
   notes?: string;
+  // Scheduled AI follow-up call
+  scheduledCall?: {
+    scheduledAt: string; // ISO format or YYYY-MM-DDTHH:mm
+    date: string; // readable date
+    time: string; // readable time
+    scenario: CallScenario;
+    notes?: string;
+    status: 'pending' | 'triggered' | 'completed' | 'cancelled';
+  };
   // Day-by-day alert & remarks fields
   latestRemark?: CandidateRemark;
   remarksHistory?: CandidateRemark[];
@@ -661,6 +670,8 @@ export interface HrBrainOverviewStats {
   humanFeedbackEntries: number;
   totalCallsProcessed: number;
   zeroRepetitionSuccessRate: number;
+  behaviorProfilesCount?: number;
+  humanReviewPendingCount?: number;
   systemMemoryLayers: {
     layer1_CurrentConversation: string;
     layer2_CandidateLongTerm: string;
@@ -668,9 +679,38 @@ export interface HrBrainOverviewStats {
     layer4_CompanyKnowledge: string;
     layer5_RecruitmentLearning: string;
     layer6_HumanFeedback: string;
+    layer7_BehaviorMemory?: string;
   };
   behaviorInsightsCount?: number;
   humanReviewRequiredCount?: number;
+}
+
+export interface CandidateBehaviorSummary {
+  callId: string;
+  timestamp: string;
+  primaryTone: ObservedCommunicationTone;
+  politeness: ObservedPoliteness;
+  cooperation: ObservedCooperation;
+  engagementLevel: EngagementLevel;
+  patience: ObservedPatience;
+  interruptionsCount: number;
+  problematicInterruption: boolean;
+  impatienceLevel: ImpatienceLevel;
+  humanReviewRequired: boolean;
+  observations: string[];
+}
+
+export interface CandidateMultiCallBehaviorProfile {
+  candidateId: string;
+  candidateName: string;
+  callSummaries: CandidateBehaviorSummary[];
+  overallTone: ObservedCommunicationTone;
+  overallPoliteness: ObservedPoliteness;
+  overallEngagement: EngagementLevel;
+  overallTrend: BehaviorTrend;
+  humanReviewFlagged: boolean;
+  humanReviewReason?: string;
+  lastUpdated: string;
 }
 
 // ============================================================================

@@ -19,11 +19,24 @@ import { NewCandidateModal } from './components/NewCandidateModal';
 import { ConfirmationEmailModal } from './components/ConfirmationEmailModal';
 import { WhatsAppReminderModal } from './components/WhatsAppReminderModal';
 import { AiHrBrainModal } from './components/AiHrBrainModal';
+import { ScheduleCallModal } from './components/ScheduleCallModal';
 import { vapiService, VapiCallStatus, DEFAULT_VAPI_ASSISTANT_ID } from './utils/vapiService';
+import { 
+  auth, 
+  googleAuthProvider, 
+  signInWithPopup, 
+  signOut, 
+  onAuthStateChanged, 
+  FirebaseUser,
+  testFirestoreConnection
+} from './utils/firebase';
+import { firestoreDataService } from './utils/firestoreDataService';
 
 export default function App() {
   const [candidates, setCandidates] = useState<Candidate[]>(INITIAL_CANDIDATES);
   const [interviewSlots, setInterviewSlots] = useState<InterviewSlot[]>(INITIAL_INTERVIEW_SLOTS);
+  const [currentUser, setCurrentUser] = useState<FirebaseUser | null>(null);
+  const [isAuthLoading, setIsAuthLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<'roster' | 'schedule' | 'followups' | 'transcripts'>('roster');
   
   const [searchQuery, setSearchQuery] = useState('');
@@ -39,6 +52,7 @@ export default function App() {
   const [activeCallScenario, setActiveCallScenario] = useState<CallScenario>('screening');
   const [showNewCandidateModal, setShowNewCandidateModal] = useState(false);
   const [confirmationMailCandidate, setConfirmationMailCandidate] = useState<Candidate | null>(null);
+  const [scheduleCallCandidate, setScheduleCallCandidate] = useState<Candidate | null>(null);
   const [whatsAppCandidate, setWhatsAppCandidate] = useState<{
     candidate: Candidate;
     template?: 'unanswered' | 'interview_reminder' | 'missed_followup';
@@ -56,6 +70,103 @@ export default function App() {
     });
     return () => unsub();
   }, []);
+
+  // Autonomous scheduler ticker: checks every 10 seconds for scheduled AI calls due
+  useEffect(() => {
+    const interval = setInterval(() => {
+      const now = new Date();
+      setCandidates((currentCandidates) => {
+        let hasTriggered = false;
+        const updated = currentCandidates.map((c) => {
+          if (
+            c.scheduledCall &&
+            c.scheduledCall.status === 'pending' &&
+            new Date(c.scheduledCall.scheduledAt).getTime() <= now.getTime()
+          ) {
+            hasTriggered = true;
+            // Trigger call immediately if no call is currently active
+            if (!activeCallCandidate && !showVapiModal) {
+              handleStartCall(c, c.scheduledCall.scenario);
+            }
+            return {
+              ...c,
+              scheduledCall: {
+                ...c.scheduledCall,
+                status: 'triggered' as const,
+              },
+              notes: `${c.notes ? c.notes + ' | ' : ''}AI follow-up call auto-triggered at ${now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}.`,
+            };
+          }
+          return c;
+        });
+
+        if (hasTriggered) {
+          // Persist triggered statuses
+          updated.forEach((cand) => {
+            if (cand.scheduledCall?.status === 'triggered') {
+              firestoreDataService.saveCandidate(cand);
+            }
+          });
+        }
+
+        return updated;
+      });
+    }, 10000);
+
+    return () => clearInterval(interval);
+  }, [activeCallCandidate, showVapiModal]);
+
+  // Initialize Firebase Auth listener and Firestore synchronization
+  useEffect(() => {
+    // 1. Mandatory connection test
+    testFirestoreConnection();
+
+    // 2. Auth state observer
+    const unsubAuth = onAuthStateChanged(auth, (user) => {
+      setCurrentUser(user);
+      setIsAuthLoading(false);
+      if (user) {
+        // Seed initial data if Firestore collections are empty
+        firestoreDataService.seedInitialDataIfEmpty();
+      }
+    });
+
+    // 3. Subscribe to Firestore Candidates
+    const unsubCandidates = firestoreDataService.subscribeCandidates((cloudCandidates) => {
+      if (cloudCandidates && cloudCandidates.length > 0) {
+        setCandidates(cloudCandidates);
+      }
+    });
+
+    // 4. Subscribe to Firestore Interview Slots
+    const unsubSlots = firestoreDataService.subscribeInterviewSlots((cloudSlots) => {
+      if (cloudSlots && cloudSlots.length > 0) {
+        setInterviewSlots(cloudSlots);
+      }
+    });
+
+    return () => {
+      unsubAuth();
+      unsubCandidates();
+      unsubSlots();
+    };
+  }, []);
+
+  const handleSignIn = async () => {
+    try {
+      await signInWithPopup(auth, googleAuthProvider);
+    } catch (error: any) {
+      console.warn('[Firebase Auth] Sign in error:', error?.message);
+    }
+  };
+
+  const handleSignOut = async () => {
+    try {
+      await signOut(auth);
+    } catch (error: any) {
+      console.warn('[Firebase Auth] Sign out error:', error?.message);
+    }
+  };
 
   const handleEmailSent = (candidateId: string) => {
     const timestamp = new Date().toISOString().replace('T', ' ').substring(0, 16);
@@ -94,6 +205,75 @@ export default function App() {
       setSelectedCandidate((prev) =>
         prev ? { ...prev, lastWhatsAppSentAt: timestamp } : null
       );
+    }
+  };
+
+  const handleSaveSchedule = (
+    candidateId: string,
+    schedule: {
+      scheduledAt: string;
+      date: string;
+      time: string;
+      scenario: CallScenario;
+      notes?: string;
+    }
+  ) => {
+    let targetCand: Candidate | null = null;
+
+    setCandidates((prev) =>
+      prev.map((c) => {
+        if (c.id === candidateId) {
+          const updated: Candidate = {
+            ...c,
+            scheduledCall: {
+              ...schedule,
+              status: 'pending',
+            },
+            notes: `${c.notes ? c.notes + ' | ' : ''}AI Follow-up call scheduled for ${schedule.date} at ${schedule.time} (${schedule.scenario}).`,
+          };
+          targetCand = updated;
+          return updated;
+        }
+        return c;
+      })
+    );
+
+    if (targetCand) {
+      firestoreDataService.saveCandidate(targetCand);
+    }
+
+    if (selectedCandidate && selectedCandidate.id === candidateId && targetCand) {
+      setSelectedCandidate(targetCand);
+    }
+  };
+
+  const handleCancelSchedule = (candidateId: string) => {
+    let targetCand: Candidate | null = null;
+
+    setCandidates((prev) =>
+      prev.map((c) => {
+        if (c.id === candidateId && c.scheduledCall) {
+          const updated: Candidate = {
+            ...c,
+            scheduledCall: {
+              ...c.scheduledCall,
+              status: 'cancelled',
+            },
+            notes: `${c.notes ? c.notes + ' | ' : ''}Scheduled AI call for ${c.scheduledCall.date} cancelled.`,
+          };
+          targetCand = updated;
+          return updated;
+        }
+        return c;
+      })
+    );
+
+    if (targetCand) {
+      firestoreDataService.saveCandidate(targetCand);
+    }
+
+    if (selectedCandidate && selectedCandidate.id === candidateId && targetCand) {
+      setSelectedCandidate(targetCand);
     }
   };
 
@@ -261,6 +441,9 @@ export default function App() {
 
   // Called when a live voice call ends
   const handleCallEnded = (updatedCandidate: Candidate, bookedSlotId?: string) => {
+    // Persist candidate to Firestore
+    firestoreDataService.saveCandidate(updatedCandidate);
+
     // Update candidate list
     setCandidates((prev) =>
       prev.map((c) => (c.id === updatedCandidate.id ? updatedCandidate : c))
@@ -271,23 +454,27 @@ export default function App() {
       setInterviewSlots((prev) =>
         prev.map((slot) => {
           if (slot.id === bookedSlotId) {
-            return {
+            const updatedSlot = {
               ...slot,
               bookedCount: 1,
               bookedCandidateId: updatedCandidate.id,
               bookedCandidateName: updatedCandidate.name,
               isAvailable: false,
             };
+            firestoreDataService.saveInterviewSlot(updatedSlot);
+            return updatedSlot;
           }
           // Free previously booked slot if this candidate had another slot
           if (slot.bookedCandidateId === updatedCandidate.id && slot.id !== bookedSlotId) {
-            return {
+            const freedSlot = {
               ...slot,
               bookedCount: 0,
               bookedCandidateId: undefined,
               bookedCandidateName: undefined,
               isAvailable: true,
             };
+            firestoreDataService.saveInterviewSlot(freedSlot);
+            return freedSlot;
           }
           return slot;
         })
@@ -348,6 +535,7 @@ export default function App() {
 
   // Add new candidate
   const handleAddCandidate = (newCand: Candidate) => {
+    firestoreDataService.saveCandidate(newCand);
     setCandidates((prev) => [newCand, ...prev]);
     setSelectedCandidate(newCand);
   };
@@ -389,6 +577,9 @@ export default function App() {
         onOpenBrainModal={() => setShowBrainModal(true)}
         vapiCallStatus={vapiCallStatus}
         activeCandidateCount={candidates.length}
+        currentUser={currentUser}
+        onSignIn={handleSignIn}
+        onSignOut={handleSignOut}
       />
 
       {/* Main Container */}
@@ -815,6 +1006,24 @@ export default function App() {
                           <span className="hidden xl:inline text-[11px] font-medium">WhatsApp</span>
                         </button>
 
+                        {/* Schedule AI Call button */}
+                        <button
+                          type="button"
+                          id={`btn-schedule-call-${cand.id}`}
+                          onClick={() => setScheduleCallCandidate(cand)}
+                          className={`p-1.5 rounded-lg border text-xs flex items-center gap-1 transition ${
+                            cand.scheduledCall?.status === 'pending'
+                              ? 'bg-amber-500/20 text-amber-300 border-amber-500/40'
+                              : 'bg-slate-800 hover:bg-slate-700 text-amber-400/90 border-slate-700'
+                          }`}
+                          title="Schedule automated AI follow-up call with date and time picker"
+                        >
+                          <Calendar className="w-3.5 h-3.5 text-amber-400" />
+                          <span className="hidden xl:inline text-[11px] font-medium">
+                            {cand.scheduledCall?.status === 'pending' ? cand.scheduledCall.time : 'Schedule'}
+                          </span>
+                        </button>
+
                         <button
                           id={`btn-call-${cand.id}`}
                           onClick={() => {
@@ -863,6 +1072,7 @@ export default function App() {
             onTriggerCall={(cand, scenario) => handleStartCall(cand, scenario)}
             onSelectCandidate={(cand) => setSelectedCandidate(cand)}
             onOpenWhatsApp={(cand, template) => setWhatsAppCandidate({ candidate: cand, template })}
+            onOpenScheduleCall={(cand) => setScheduleCallCandidate(cand)}
           />
         )}
 
@@ -985,6 +1195,11 @@ export default function App() {
           onStartVapiCall={(cand) => handleStartVapiCall(cand)}
           onOpenConfirmationMail={(cand) => setConfirmationMailCandidate(cand)}
           onOpenWhatsApp={(cand, template) => setWhatsAppCandidate({ candidate: cand, template })}
+          onOpenScheduleCall={(cand) => setScheduleCallCandidate(cand)}
+          onUpdateCandidate={(updated) => {
+            setSelectedCandidate(updated);
+            setCandidates((prev) => prev.map((c) => (c.id === updated.id ? updated : c)));
+          }}
         />
       )}
 
@@ -1027,6 +1242,16 @@ export default function App() {
             setShowBrainModal(false);
             handleStartCall(cand, 'screening');
           }}
+        />
+      )}
+
+      {/* MODAL 7: SCHEDULE AI FOLLOW-UP CALL MODAL */}
+      {scheduleCallCandidate && (
+        <ScheduleCallModal
+          candidate={scheduleCallCandidate}
+          onClose={() => setScheduleCallCandidate(null)}
+          onSaveSchedule={handleSaveSchedule}
+          onCancelSchedule={handleCancelSchedule}
         />
       )}
     </div>

@@ -1,0 +1,109 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "Authenticated recruiter or HR team member.",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "description": "Firebase Auth UID" },
+        "email": { "type": "string", "format": "email", "description": "Recruiter work email address" },
+        "displayName": { "type": "string", "description": "Recruiter display name" },
+        "photoURL": { "type": "string", "description": "Profile picture URL" },
+        "role": { "type": "string", "enum": ["recruiter", "admin", "hr_manager"], "description": "Role within White Collar Realty HR team" },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Account creation timestamp" },
+        "lastLoginAt": { "type": "string", "format": "date-time", "description": "Last sign-in timestamp" }
+      },
+      "required": ["uid", "email"]
+    },
+    "Candidate": {
+      "title": "Candidate",
+      "description": "Screened real estate candidate for White Collar Realty Gurgaon sales advisory roles.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Candidate unique ID" },
+        "name": { "type": "string", "description": "Candidate full name" },
+        "phone": { "type": "string", "description": "Contact mobile number" },
+        "email": { "type": "string", "description": "Candidate email address" },
+        "appliedRole": { "type": "string", "description": "Applied role (e.g. Sales Executive Luxury Residential)" },
+        "status": { "type": "string", "description": "Recruitment pipeline status" },
+        "priority": { "type": "string", "enum": ["HIGH", "MEDIUM", "LOW"], "description": "Recruiter prioritization level" },
+        "appliedDate": { "type": "string", "description": "Application date" },
+        "unansweredAttempts": { "type": "number", "description": "Count of unanswered call attempts" },
+        "interviewSlotId": { "type": "string", "description": "Booked interview slot reference" },
+        "interviewDate": { "type": "string", "description": "Scheduled interview date" },
+        "interviewTime": { "type": "string", "description": "Scheduled interview time" },
+        "notes": { "type": "string", "description": "HR recruiter notes and timeline logs" },
+        "lastEmailSentAt": { "type": "string", "description": "Timestamp of confirmation email dispatch" },
+        "lastWhatsAppSentAt": { "type": "string", "description": "Timestamp of WhatsApp reminder dispatch" },
+        "scheduledCall": {
+          "type": "object",
+          "description": "Scheduled AI auto-trigger call details with date, time, and conversation scenario.",
+          "properties": {
+            "scheduledAt": { "type": "string", "description": "ISO timestamp for auto-triggering" },
+            "date": { "type": "string", "description": "Target call date" },
+            "time": { "type": "string", "description": "Target call time" },
+            "scenario": { "type": "string", "description": "Call scenario" },
+            "notes": { "type": "string", "description": "Special instructions for AI agent" },
+            "status": { "type": "string", "enum": ["pending", "triggered", "completed", "cancelled"], "description": "Scheduled call execution status" }
+          }
+        },
+        "updatedAt": { "type": "string", "format": "date-time", "description": "Record last modification timestamp" }
+      },
+      "required": ["id", "name", "phone", "appliedRole", "status"]
+    },
+    "InterviewSlot": {
+      "title": "InterviewSlot",
+      "description": "Face-to-face interview slot at White Collar Realty Gurugram office (M3M Urbana Sector 67).",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Slot identifier" },
+        "date": { "type": "string", "description": "Interview slot date" },
+        "time": { "type": "string", "description": "Interview slot time" },
+        "displayLabel": { "type": "string", "description": "Human readable slot label" },
+        "status": { "type": "string", "enum": ["Available", "Booked", "Completed", "Cancelled"], "description": "Slot availability" },
+        "isAvailable": { "type": "boolean", "description": "Availability flag" },
+        "candidateId": { "type": "string", "description": "Associated candidate ID if booked" },
+        "candidateName": { "type": "string", "description": "Associated candidate name if booked" },
+        "recruiterName": { "type": "string", "description": "Interviewer name" },
+        "venue": { "type": "string", "description": "Interview venue address" }
+      },
+      "required": ["id", "date", "time", "status"]
+    },
+    "CallLog": {
+      "title": "CallLog",
+      "description": "Conversation log and voice recording session transcript with Gemini Live or Vapi.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Call log unique identifier" },
+        "candidateId": { "type": "string", "description": "Candidate ID" },
+        "candidateName": { "type": "string", "description": "Candidate name" },
+        "scenario": { "type": "string", "description": "Screening scenario type" },
+        "startedAt": { "type": "string", "format": "date-time", "description": "Call start timestamp" },
+        "durationSeconds": { "type": "number", "description": "Duration of call in seconds" },
+        "outcome": { "type": "string", "description": "Outcome of screening call" },
+        "modelUsed": { "type": "string", "description": "Model used (gemini-3.8-live, Vapi)" },
+        "transcriptsCount": { "type": "number", "description": "Number of conversation turns" },
+        "updatedAt": { "type": "string", "format": "date-time", "description": "Log timestamp" }
+      },
+      "required": ["id", "candidateId", "startedAt"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "User",
+      "description": "Recruiter and HR manager user profiles."
+    },
+    "/candidates/{candidateId}": {
+      "schema": "Candidate",
+      "description": "Candidate roster documents for White Collar Realty hiring pipeline."
+    },
+    "/interview_slots/{slotId}": {
+      "schema": "InterviewSlot",
+      "description": "Calendar slots for face-to-face interviews at Sector 67 Gurugram."
+    },
+    "/call_logs/{callId}": {
+      "schema": "CallLog",
+      "description": "Historical voice call transcripts, outcomes, and screening logs."
+    }
+  }
+}

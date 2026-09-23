@@ -2,7 +2,7 @@ import React from 'react';
 import { 
   PhoneCall, AlertTriangle, Clock, UserX, PhoneMissed, 
   CalendarClock, CheckCircle, ShieldAlert, ChevronRight, RefreshCw, MessageSquare,
-  Bell, Tag, Sparkles, Building2
+  Bell, Tag, Sparkles, Building2, Calendar, BellRing
 } from 'lucide-react';
 import { Candidate } from '../types';
 
@@ -11,6 +11,7 @@ interface FollowupQueueTabProps {
   onTriggerCall: (candidate: Candidate, scenario: string) => void;
   onSelectCandidate: (candidate: Candidate) => void;
   onOpenWhatsApp?: (candidate: Candidate, template?: 'unanswered' | 'interview_reminder' | 'missed_followup') => void;
+  onOpenScheduleCall?: (candidate: Candidate) => void;
 }
 
 export const FollowupQueueTab: React.FC<FollowupQueueTabProps> = ({
@@ -18,7 +19,13 @@ export const FollowupQueueTab: React.FC<FollowupQueueTabProps> = ({
   onTriggerCall,
   onSelectCandidate,
   onOpenWhatsApp,
+  onOpenScheduleCall,
 }) => {
+  // Category 0: Scheduled AI Auto-Trigger Calls
+  const scheduledCandidates = candidates.filter(
+    (c) => c.scheduledCall && c.scheduledCall.status === 'pending'
+  );
+
   // Category 1: Unanswered calls
   const unansweredCandidates = candidates.filter((c) => c.unansweredAttempts > 0 && c.status !== 'Declined - Do Not Call');
 
@@ -42,6 +49,102 @@ export const FollowupQueueTab: React.FC<FollowupQueueTabProps> = ({
 
   return (
     <div className="space-y-8">
+      {/* 0. Scheduled AI Calls Section (Featured Auto-Trigger Queue) */}
+      <div className="bg-[#0f182c] border border-amber-500/30 rounded-2xl p-5 shadow-xl">
+        <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
+          <div className="flex items-center gap-2.5">
+            <div className="w-8 h-8 rounded-lg bg-amber-500/20 text-amber-400 border border-amber-500/40 flex items-center justify-center shadow-xs">
+              <Calendar className="w-4 h-4" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <h3 className="text-sm font-bold text-white uppercase tracking-wider">
+                  Scheduled AI Auto-Trigger Calls ({scheduledCandidates.length})
+                </h3>
+                <span className="px-2 py-0.5 text-[10px] font-bold rounded-md bg-amber-500/10 text-amber-400 border border-amber-500/20 uppercase tracking-wide">
+                  Live Queue
+                </span>
+              </div>
+              <p className="text-xs text-slate-400">
+                Calls queued for Arjun to place automatically at the designated date & time
+              </p>
+            </div>
+          </div>
+        </div>
+
+        {scheduledCandidates.length === 0 ? (
+          <div className="p-6 text-center rounded-xl bg-slate-950/40 border border-slate-800/80 text-xs text-slate-500">
+            No scheduled AI calls in queue. You can schedule a call from any candidate card or drawer.
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
+            {scheduledCandidates.map((cand) => {
+              const sched = cand.scheduledCall!;
+              return (
+                <div
+                  key={cand.id}
+                  className="p-4 rounded-xl bg-slate-900 border border-amber-500/40 flex flex-col justify-between shadow-md"
+                >
+                  <div>
+                    <div className="flex items-start justify-between">
+                      <div>
+                        <h4 className="text-sm font-bold text-white flex items-center gap-2">
+                          <span>{cand.name}</span>
+                          <span className="w-2 h-2 rounded-full bg-amber-400 animate-ping inline-block" />
+                        </h4>
+                        <p className="text-xs text-amber-400">{cand.appliedRole}</p>
+                        <p className="text-[11px] text-slate-400 font-mono mt-0.5">{cand.phone}</p>
+                      </div>
+                      <span className="px-2 py-0.5 text-[10px] font-bold bg-amber-500/20 text-amber-300 rounded border border-amber-500/40">
+                        {sched.scenario.toUpperCase()}
+                      </span>
+                    </div>
+
+                    <div className="mt-3 p-2.5 rounded-lg bg-amber-950/30 border border-amber-500/30 text-xs text-amber-200">
+                      <div className="flex items-center gap-1.5 font-semibold text-amber-300">
+                        <Clock className="w-3.5 h-3.5 text-amber-400" />
+                        <span>Auto-Trigger Time: {sched.date} at {sched.time}</span>
+                      </div>
+                      {sched.notes && (
+                        <div className="text-[11px] text-slate-300 mt-1 italic">
+                          "{sched.notes}"
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="mt-4 pt-3 border-t border-slate-800 flex items-center justify-between gap-2">
+                    <button
+                      onClick={() => onSelectCandidate(cand)}
+                      className="text-xs text-slate-400 hover:text-white"
+                    >
+                      View Dossier
+                    </button>
+                    <div className="flex items-center gap-2">
+                      {onOpenScheduleCall && (
+                        <button
+                          onClick={() => onOpenScheduleCall(cand)}
+                          className="text-xs text-amber-400 hover:text-amber-300 px-2.5 py-1.5 rounded-lg bg-slate-800 border border-slate-700 font-medium transition"
+                        >
+                          Reschedule
+                        </button>
+                      )}
+                      <button
+                        onClick={() => onTriggerCall(cand, sched.scenario)}
+                        className="inline-flex items-center gap-1.5 text-xs font-semibold bg-amber-500 hover:bg-amber-400 text-slate-950 px-3 py-1.5 rounded-lg transition shadow-md shadow-amber-500/20 font-bold"
+                        title="Trigger now without waiting for timer"
+                      >
+                        <PhoneCall className="w-3.5 h-3.5" />
+                        <span>Trigger Now</span>
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
       {/* 1. Callback Requests Section */}
       <div className="bg-[#0f182c] border border-slate-800 rounded-2xl p-5 shadow-xl">
         <div className="flex items-center justify-between mb-4">

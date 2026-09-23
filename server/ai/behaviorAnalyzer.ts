@@ -19,6 +19,8 @@ import {
   NegotiationStyleObserved,
   ConversationalAdaptability,
   InterruptionClassification,
+  CandidateBehaviorSummary,
+  CandidateMultiCallBehaviorProfile,
 } from '../../src/types';
 import { behaviorRepository } from '../repositories/behaviorRepository';
 import { memoryRepository } from '../repositories/memoryRepository';
@@ -1126,6 +1128,31 @@ Generate a comprehensive, evidence-grounded behavior profile adhering strictly t
       memoryRepository.saveCandidateMemory(mem);
     }
   }
+
+  /**
+   * Aggregate multi-call behavior profiles
+   */
+  public aggregateMultiCallProfile(
+    candidateId: string,
+    candidateName: string,
+    summaries: CandidateBehaviorSummary[]
+  ): CandidateMultiCallBehaviorProfile {
+    const lastSummary = summaries[summaries.length - 1];
+    const flagged = summaries.some((s) => s.humanReviewRequired);
+    return {
+      candidateId,
+      candidateName,
+      callSummaries: summaries,
+      overallTone: lastSummary?.primaryTone || 'professional',
+      overallPoliteness: lastSummary?.politeness || 'generally polite',
+      overallEngagement: lastSummary?.engagementLevel || 'MEDIUM',
+      overallTrend: summaries.length > 1 ? 'STABLE' : 'INSUFFICIENT_DATA',
+      humanReviewFlagged: flagged,
+      humanReviewReason: flagged ? 'Flagged during call interaction review' : undefined,
+      lastUpdated: new Date().toISOString(),
+    };
+  }
 }
 
 export const candidateBehaviorAnalyzer = new CandidateBehaviorAnalyzer();
+export const behaviorAnalyzer = candidateBehaviorAnalyzer;

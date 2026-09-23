@@ -1,13 +1,15 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { 
   X, Phone, Mail, Building, Briefcase, Award, DollarSign, 
   MapPin, Clock, Calendar, CheckCircle2, AlertTriangle, 
   ChevronRight, MessageSquare, Play, Sparkles, UserCheck,
   Bell, ShieldAlert, History, Tag, Brain, ShieldCheck, Target,
-  Check
+  Check, FileText, Bold, Italic, List, CheckSquare, Save, Undo,
+  CornerDownLeft, Loader2
 } from 'lucide-react';
 import { Candidate, CallRecord, CandidateLongTermMemory, NextCallBrief } from '../types';
 import { CandidateBehaviorCard } from './CandidateBehaviorCard';
+import { firestoreDataService } from '../utils/firestoreDataService';
 
 interface CandidateDrawerProps {
   candidate: Candidate | null;
@@ -16,6 +18,8 @@ interface CandidateDrawerProps {
   onStartVapiCall?: (candidate: Candidate) => void;
   onOpenConfirmationMail?: (candidate: Candidate) => void;
   onOpenWhatsApp?: (candidate: Candidate, template?: 'unanswered' | 'interview_reminder' | 'missed_followup') => void;
+  onOpenScheduleCall?: (candidate: Candidate) => void;
+  onUpdateCandidate?: (updated: Candidate) => void;
 }
 
 export const CandidateDrawer: React.FC<CandidateDrawerProps> = ({
@@ -25,10 +29,94 @@ export const CandidateDrawer: React.FC<CandidateDrawerProps> = ({
   onStartVapiCall,
   onOpenConfirmationMail,
   onOpenWhatsApp,
+  onOpenScheduleCall,
+  onUpdateCandidate,
 }) => {
   const [selectedCall, setSelectedCall] = useState<CallRecord | null>(null);
   const [candidateMemory, setCandidateMemory] = useState<CandidateLongTermMemory | null>(null);
   const [showBrainMemory, setShowBrainMemory] = useState<boolean>(true);
+
+  // Manual Rich-Text HR Call Notes State
+  const [hrNotes, setHrNotes] = useState<string>(candidate?.notes || '');
+  const [isSavingNotes, setIsSavingNotes] = useState<boolean>(false);
+  const [lastSavedTimestamp, setLastSavedTimestamp] = useState<string | null>(null);
+  const notesTextareaRef = useRef<HTMLTextAreaElement | null>(null);
+
+  // Sync state whenever selected candidate changes
+  useEffect(() => {
+    setHrNotes(candidate?.notes || '');
+  }, [candidate?.id]);
+
+  // Save notes directly and immediately to Firestore
+  const handlePersistNotes = async (newNotesText: string) => {
+    if (!candidate) return;
+    setIsSavingNotes(true);
+    const updatedCandidate: Candidate = {
+      ...candidate,
+      notes: newNotesText,
+    };
+
+    try {
+      await firestoreDataService.saveCandidate(updatedCandidate);
+      const timeStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+      setLastSavedTimestamp(timeStr);
+      if (onUpdateCandidate) {
+        onUpdateCandidate(updatedCandidate);
+      }
+    } catch (e) {
+      console.warn('[Firestore] Failed to save HR notes immediately:', e);
+    } finally {
+      setIsSavingNotes(false);
+    }
+  };
+
+  // Text formatting insertion helpers
+  const handleApplyFormatting = (type: 'bold' | 'italic' | 'bullet' | 'check' | 'timestamp') => {
+    const textarea = notesTextareaRef.current;
+    if (!textarea) return;
+
+    const start = textarea.selectionStart;
+    const end = textarea.selectionEnd;
+    const current = hrNotes;
+    const selected = current.substring(start, end);
+
+    let replacement = '';
+    let cursorOffset = 0;
+
+    switch (type) {
+      case 'bold':
+        replacement = selected ? `**${selected}**` : '**bold text**';
+        cursorOffset = selected ? replacement.length : 2;
+        break;
+      case 'italic':
+        replacement = selected ? `*${selected}*` : '*italic text*';
+        cursorOffset = selected ? replacement.length : 1;
+        break;
+      case 'bullet':
+        replacement = `\n• ${selected || 'Observation: '}`;
+        cursorOffset = replacement.length;
+        break;
+      case 'check':
+        replacement = `\n[✓] ${selected || 'Verified requirement: '}`;
+        cursorOffset = replacement.length;
+        break;
+      case 'timestamp': {
+        const timeNow = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        replacement = `\n[${timeNow} HR Note]: `;
+        cursorOffset = replacement.length;
+        break;
+      }
+    }
+
+    const updatedText = current.substring(0, start) + replacement + current.substring(end);
+    setHrNotes(updatedText);
+    handlePersistNotes(updatedText);
+
+    setTimeout(() => {
+      textarea.focus();
+      textarea.setSelectionRange(start + cursorOffset, start + cursorOffset);
+    }, 50);
+  };
 
   useEffect(() => {
     if (candidate?.id) {
@@ -170,6 +258,29 @@ export const CandidateDrawer: React.FC<CandidateDrawerProps> = ({
               </button>
             )}
 
+            {onOpenScheduleCall && (
+              <button
+                id="btn-drawer-schedule-call"
+                onClick={() => onOpenScheduleCall(candidate)}
+                className={`flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-xs font-semibold transition shadow-xs ${
+                  candidate.scheduledCall?.status === 'pending'
+                    ? 'bg-amber-500/25 hover:bg-amber-500/35 text-amber-300 border border-amber-500/50'
+                    : 'bg-slate-800 hover:bg-slate-700 text-amber-400 border border-amber-500/30'
+                }`}
+                title="Schedule automated AI follow-up call with date and time picker"
+              >
+                <Calendar className="w-3.5 h-3.5 text-amber-400" />
+                <span>
+                  {candidate.scheduledCall?.status === 'pending'
+                    ? `Call Scheduled (${candidate.scheduledCall.time})`
+                    : 'Schedule AI Call'}
+                </span>
+                {candidate.scheduledCall?.status === 'pending' && (
+                  <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-ping inline-block" />
+                )}
+              </button>
+            )}
+
             {onOpenConfirmationMail && (candidate.interviewSlotId || candidate.status === 'Interview Scheduled' || candidate.status === 'Attendance Confirmed') && (
               <button
                 onClick={() => onOpenConfirmationMail(candidate)}
@@ -270,6 +381,35 @@ export const CandidateDrawer: React.FC<CandidateDrawerProps> = ({
                 {candidate.latestRemark?.text || candidate.notes || 'Screening pending. Profile awaiting initial AI voice outreach.'}
               </p>
             </div>
+
+            {/* Scheduled AI Call Banner */}
+            {candidate.scheduledCall && candidate.scheduledCall.status === 'pending' && (
+              <div className="mt-3 p-3 rounded-xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-between gap-3 text-xs">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-7 h-7 rounded-lg bg-amber-500/20 text-amber-400 flex items-center justify-center shrink-0">
+                    <Clock className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <div className="font-bold text-amber-300 flex items-center gap-1.5">
+                      <span>AI Follow-up Call Scheduled</span>
+                      <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-ping inline-block" />
+                    </div>
+                    <p className="text-[11px] text-slate-300 mt-0.5">
+                      {candidate.scheduledCall.date} at {candidate.scheduledCall.time} ({candidate.scheduledCall.scenario})
+                      {candidate.scheduledCall.notes && ` • "${candidate.scheduledCall.notes}"`}
+                    </p>
+                  </div>
+                </div>
+                {onOpenScheduleCall && (
+                  <button
+                    onClick={() => onOpenScheduleCall(candidate)}
+                    className="text-[11px] text-amber-400 hover:text-amber-300 underline font-semibold shrink-0"
+                  >
+                    Edit
+                  </button>
+                )}
+              </div>
+            )}
 
             {/* Alert Detail Line */}
             {candidate.alertReason && (
@@ -586,6 +726,134 @@ export const CandidateDrawer: React.FC<CandidateDrawerProps> = ({
               candidateId={candidate.id}
               initialReport={candidate.latestBehaviorReport}
             />
+          </div>
+
+          {/* HR Manual Notes & Live Call Log Section (Persisted to Firestore immediately) */}
+          <div className="p-4 rounded-xl bg-gradient-to-br from-[#0d1627] via-slate-900 to-[#0b1220] border border-amber-500/30 shadow-lg">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-800">
+              <div className="flex items-center gap-2.5">
+                <div className="p-1.5 rounded-lg bg-amber-500/20 text-amber-400 border border-amber-500/40">
+                  <FileText className="w-4 h-4" />
+                </div>
+                <div>
+                  <h4 className="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-2">
+                    <span>HR Manual Notes & Call Observations</span>
+                    <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-500/10 text-amber-400 border border-amber-500/20">
+                      Live Firestore Sync
+                    </span>
+                  </h4>
+                  <p className="text-[11px] text-slate-400">
+                    Log observations, candidate counter-offers, or post-call verification details
+                  </p>
+                </div>
+              </div>
+
+              {/* Real-time Save Status Indicator */}
+              <div className="flex items-center gap-2 text-xs">
+                {isSavingNotes ? (
+                  <span className="flex items-center gap-1.5 text-amber-400 font-medium">
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    <span>Saving...</span>
+                  </span>
+                ) : lastSavedTimestamp ? (
+                  <span className="flex items-center gap-1.5 text-emerald-400 font-medium text-[11px]">
+                    <CheckCircle2 className="w-3.5 h-3.5" />
+                    <span>Saved to Firestore ({lastSavedTimestamp})</span>
+                  </span>
+                ) : (
+                  <span className="text-slate-500 text-[11px]">Auto-saved on change</span>
+                )}
+              </div>
+            </div>
+
+            {/* Rich-Text Formatting Toolbar */}
+            <div className="mt-3 flex items-center gap-1.5 p-1.5 bg-slate-950/80 rounded-lg border border-slate-800 flex-wrap">
+              <button
+                type="button"
+                onClick={() => handleApplyFormatting('bold')}
+                className="px-2 py-1 rounded hover:bg-slate-800 text-slate-300 hover:text-white text-xs font-bold flex items-center gap-1 transition"
+                title="Bold (**text**)"
+              >
+                <Bold className="w-3.5 h-3.5" />
+                <span className="text-[11px]">Bold</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => handleApplyFormatting('italic')}
+                className="px-2 py-1 rounded hover:bg-slate-800 text-slate-300 hover:text-white text-xs italic flex items-center gap-1 transition"
+                title="Italic (*text*)"
+              >
+                <Italic className="w-3.5 h-3.5" />
+                <span className="text-[11px]">Italic</span>
+              </button>
+
+              <div className="h-4 w-[1px] bg-slate-800 mx-1" />
+
+              <button
+                type="button"
+                onClick={() => handleApplyFormatting('bullet')}
+                className="px-2 py-1 rounded hover:bg-slate-800 text-slate-300 hover:text-white text-xs flex items-center gap-1 transition"
+                title="Insert Bullet Point"
+              >
+                <List className="w-3.5 h-3.5" />
+                <span className="text-[11px]">Bullet</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => handleApplyFormatting('check')}
+                className="px-2 py-1 rounded hover:bg-slate-800 text-slate-300 hover:text-white text-xs flex items-center gap-1 transition"
+                title="Insert Requirement Checkpoint"
+              >
+                <CheckSquare className="w-3.5 h-3.5 text-emerald-400" />
+                <span className="text-[11px]">Requirement Check</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => handleApplyFormatting('timestamp')}
+                className="px-2 py-1 rounded hover:bg-slate-800 text-slate-300 hover:text-white text-xs flex items-center gap-1 transition"
+                title="Insert Current Time Stamp"
+              >
+                <Clock className="w-3.5 h-3.5 text-amber-400" />
+                <span className="text-[11px]">Stamp Time</span>
+              </button>
+
+              <div className="ml-auto flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => handlePersistNotes(hrNotes)}
+                  disabled={isSavingNotes}
+                  className="px-2.5 py-1 rounded bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-bold flex items-center gap-1.5 transition disabled:opacity-50"
+                  title="Force immediate cloud persist"
+                >
+                  <Save className="w-3 h-3" />
+                  <span>Save Notes</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Editable Rich-Text Area */}
+            <div className="mt-2.5">
+              <textarea
+                ref={notesTextareaRef}
+                rows={5}
+                value={hrNotes}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  setHrNotes(val);
+                }}
+                onBlur={() => {
+                  handlePersistNotes(hrNotes);
+                }}
+                placeholder="Log internal recruiter thoughts during or after calls... e.g.:
+• Candidate demonstrated strong understanding of Golf Course Extension Road developer inventory.
+• Currently drawing 16 LPA fixed, open to 20-22 LPA depending on DLF project allocation.
+[✓] Verified 4.5 years luxury real estate sales pedigree."
+                className="w-full bg-slate-950/70 border border-slate-700/80 rounded-xl p-3 text-xs text-slate-200 placeholder:text-slate-500 font-sans focus:outline-hidden focus:border-amber-500 transition leading-relaxed resize-y"
+              />
+            </div>
           </div>
 
           {/* Call Logs & Transcripts */}

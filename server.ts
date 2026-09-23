@@ -2943,8 +2943,12 @@ app.post('/api/brain/behavior/analyze-turn', (req, res) => {
 // Vite middleware & Production static serving
 async function startServer() {
   if (process.env.NODE_ENV !== 'production') {
+    const isHmrDisabled = process.env.DISABLE_HMR === 'true';
     const vite = await createViteServer({
-      server: { middlewareMode: true },
+      server: {
+        middlewareMode: true,
+        hmr: isHmrDisabled ? false : { server },
+      },
       appType: 'spa',
     });
     app.use(vite.middlewares);
@@ -2955,6 +2959,14 @@ async function startServer() {
       res.sendFile(path.join(distPath, 'index.html'));
     });
   }
+
+  server.on('error', (err: any) => {
+    if (err.code === 'EADDRINUSE') {
+      console.error(`[Server] Port ${PORT} is already in use. A process is already running on this port.`);
+    } else {
+      console.error('[Server] Unhandled server error:', err);
+    }
+  });
 
   server.listen(PORT, '0.0.0.0', () => {
     console.log(`White Collar Realty HR Voice Server running on http://0.0.0.0:${PORT}`);
