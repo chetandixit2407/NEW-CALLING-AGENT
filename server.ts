@@ -21,15 +21,46 @@ import { interviewSlotRepository } from './server/repositories/interviewSlotRepo
 import { followupRepository } from './server/repositories/followupRepository';
 import { runJsonToFirestoreMigration } from './server/scripts/migrateJsonToFirestore';
 import { callingQueueManager } from './server/automation/callingQueue';
+import { createAuthRouter } from './server/auth/authRoutes';
+import { getAllowedOrigins } from './server/auth/authService';
 
 dotenv.config();
 
 const app = express();
+app.set('trust proxy', 1);
 const server = http.createServer(app);
 setupGeminiLiveWebSocket(server, app);
 const PORT = 3000;
 
 app.use(express.json({ limit: '10mb' }));
+
+// Ensure Google Sign-In & OAuth popups can communicate cleanly across Chrome and Edge
+app.use((req, res, next) => {
+  res.setHeader('Cross-Origin-Opener-Policy', 'same-origin-allow-popups');
+  next();
+});
+
+// Origin-verified CORS middleware (no wildcard on credentialed endpoints)
+app.use('/api', (req, res, next) => {
+  const origin = req.get('origin');
+  if (origin) {
+    const allowedOrigins = getAllowedOrigins(req);
+    const normalized = origin.replace(/\/+$/, '');
+    if (allowedOrigins.has(normalized)) {
+      res.setHeader('Access-Control-Allow-Origin', origin);
+      res.setHeader('Access-Control-Allow-Credentials', 'true');
+      res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With');
+      res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PATCH, PUT, DELETE, OPTIONS');
+      res.setHeader('Vary', 'Origin');
+    }
+  }
+  if (req.method === 'OPTIONS') {
+    return res.status(204).end();
+  }
+  next();
+});
+
+app.use('/api/auth', createAuthRouter());
 
 // Lazy initialization of Gemini Client
 let aiClient: GoogleGenAI | null = null;

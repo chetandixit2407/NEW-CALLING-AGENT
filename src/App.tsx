@@ -4,7 +4,7 @@ import {
   Sparkles, CheckCircle2, AlertTriangle, ArrowUpRight, 
   Building, MapPin, Briefcase, DollarSign, MessageSquare, 
   Bot, Phone, ChevronRight, RefreshCw, Plus, CheckCircle, 
-  HelpCircle, Volume2, Mail, Bell, ShieldAlert, Tag, Radio
+  HelpCircle, Volume2, Mail, Bell, ShieldAlert, Tag, Radio, X
 } from 'lucide-react';
 import { Candidate, InterviewSlot, CallScenario } from './types';
 import { INITIAL_CANDIDATES, INITIAL_INTERVIEW_SLOTS } from './data/mockCandidates';
@@ -24,20 +24,32 @@ import { ScheduleCallModal } from './components/ScheduleCallModal';
 import { vapiService, VapiCallStatus, DEFAULT_VAPI_ASSISTANT_ID } from './utils/vapiService';
 import { 
   auth, 
-  googleAuthProvider, 
-  signInWithPopup, 
-  signOut, 
-  onAuthStateChanged, 
-  FirebaseUser,
+  ensureAuthPersistence,
+  onIdTokenChanged,
   testFirestoreConnection
 } from './utils/firebase';
+import {
+  type AuthenticatedUser,
+  type AuthConfigStatus,
+  type AuthUiError,
+  classifyAuthError,
+  completeRedirectSignInIfPresent,
+  fetchAuthConfig,
+  restoreBackendSession,
+  signInWithGoogleUnified,
+  signOutUnified,
+  syncFirebaseUserWithBackend,
+} from './utils/authService';
 import { firestoreDataService } from './utils/firestoreDataService';
 
 export default function App() {
   const [candidates, setCandidates] = useState<Candidate[]>(INITIAL_CANDIDATES);
   const [interviewSlots, setInterviewSlots] = useState<InterviewSlot[]>(INITIAL_INTERVIEW_SLOTS);
-  const [currentUser, setCurrentUser] = useState<FirebaseUser | null>(null);
+  const [currentUser, setCurrentUser] = useState<AuthenticatedUser | null>(null);
   const [isAuthLoading, setIsAuthLoading] = useState(true);
+  const [isSigningIn, setIsSigningIn] = useState(false);
+  const [authError, setAuthError] = useState<AuthUiError | null>(null);
+  const [authConfig, setAuthConfig] = useState<AuthConfigStatus | null>(null);
   const [activeTab, setActiveTab] = useState<'roster' | 'schedule' | 'followups' | 'transcripts'>('roster');
   
   const [searchQuery, setSearchQuery] = useState('');
@@ -117,29 +129,83 @@ export default function App() {
     return () => clearInterval(interval);
   }, [activeCallCandidate, showVapiModal]);
 
-  // Initialize Firebase Auth listener and Firestore synchronization
+  // Initialize Auth session, redirect completion, and Firestore synchronization
   useEffect(() => {
+    let isMounted = true;
+
     // 1. Mandatory connection test
     testFirestoreConnection();
 
-    // 2. Auth state observer
-    const unsubAuth = onAuthStateChanged(auth, (user) => {
-      setCurrentUser(user);
-      setIsAuthLoading(false);
-      if (user) {
-        // Seed initial data if Firestore collections are empty
+    // 2. Fetch auth configuration & handle any pending redirect sign-in / cookie session
+    (async () => {
+      await ensureAuthPersistence();
+      const [cfg, redirectRes] = await Promise.all([
+        fetchAuthConfig(),
+        completeRedirectSignInIfPresent(),
+      ]);
+
+      if (!isMounted) return;
+      if (cfg) setAuthConfig(cfg);
+
+      if (redirectRes.error) {
+        setAuthError(redirectRes.error);
+      } else if (redirectRes.user) {
+        setCurrentUser(redirectRes.user);
+        setAuthError(null);
         firestoreDataService.seedInitialDataIfEmpty();
+      } else {
+        const restored = await restoreBackendSession();
+        if (isMounted && restored) {
+          setCurrentUser(restored);
+        }
       }
+      if (isMounted) setIsAuthLoading(false);
+    })();
+
+    // 3. Firebase Auth token observer (handles initial restore, Google login, and token refresh)
+    const unsubAuth = onIdTokenChanged(auth, async (fbUser) => {
+      if (!isMounted) return;
+      if (fbUser) {
+        try {
+          const syncedUser = await syncFirebaseUserWithBackend(fbUser);
+          if (isMounted) {
+            setCurrentUser(syncedUser);
+            setAuthError(null);
+            firestoreDataService.seedInitialDataIfEmpty();
+          }
+        } catch (err: any) {
+          console.warn('[Auth] Backend session sync warning:', err?.message);
+          if (isMounted) {
+            // Preserve Firebase identity fields while surfacing token verification issue if needed
+            setCurrentUser({
+              uid: fbUser.uid,
+              email: fbUser.email || '',
+              displayName: fbUser.displayName || fbUser.email?.split('@')[0] || 'HR Recruiter',
+              photoURL: fbUser.photoURL || '',
+              role: 'recruiter',
+              emailVerified: fbUser.emailVerified,
+              authProvider: 'firebase_google',
+            });
+          }
+        }
+      } else {
+        // Keep OAuth 2.0 cookie session if active; only clear if no backend session exists
+        const existingSession = await restoreBackendSession();
+        if (isMounted) {
+          setCurrentUser(existingSession);
+        }
+      }
+      if (isMounted) setIsAuthLoading(false);
     });
 
-    // 3. Subscribe to Firestore Candidates
+    // 4. Subscribe to Firestore Candidates
     const unsubCandidates = firestoreDataService.subscribeCandidates((cloudCandidates) => {
       if (cloudCandidates && cloudCandidates.length > 0) {
         setCandidates(cloudCandidates);
       }
     });
 
-    // 4. Subscribe to Firestore Interview Slots
+    // 5. Subscribe to Firestore Interview Slots
     const unsubSlots = firestoreDataService.subscribeInterviewSlots((cloudSlots) => {
       if (cloudSlots && cloudSlots.length > 0) {
         setInterviewSlots(cloudSlots);
@@ -147,6 +213,7 @@ export default function App() {
     });
 
     return () => {
+      isMounted = false;
       unsubAuth();
       unsubCandidates();
       unsubSlots();
@@ -154,18 +221,44 @@ export default function App() {
   }, []);
 
   const handleSignIn = async () => {
+    if (isSigningIn) return;
+    setAuthError(null);
+    setIsSigningIn(true);
+
+    let resolvedConfig = authConfig;
     try {
-      await signInWithPopup(auth, googleAuthProvider);
+      if (!resolvedConfig || !resolvedConfig.isOriginAuthorizedInFirebase) {
+        const refreshed = await fetchAuthConfig(true);
+        if (refreshed) {
+          resolvedConfig = refreshed;
+          setAuthConfig(refreshed);
+        }
+      }
+      const user = await signInWithGoogleUnified(resolvedConfig);
+      setCurrentUser(user);
+      setAuthError(null);
+      firestoreDataService.seedInitialDataIfEmpty();
     } catch (error: any) {
-      console.warn('[Firebase Auth] Sign in error:', error?.message);
+      if (error?.code === 'REDIRECT_IN_PROGRESS') {
+        return;
+      }
+      const mapped = classifyAuthError(
+        error,
+        resolvedConfig?.googleOAuthConfigured ? 'oauth2' : 'firebase_popup'
+      );
+      setAuthError(mapped);
+    } finally {
+      setIsSigningIn(false);
     }
   };
 
   const handleSignOut = async () => {
     try {
-      await signOut(auth);
+      await signOutUnified();
+      setCurrentUser(null);
+      setAuthError(null);
     } catch (error: any) {
-      console.warn('[Firebase Auth] Sign out error:', error?.message);
+      console.warn('[Auth] Sign out error:', error?.message);
     }
   };
 
@@ -579,9 +672,60 @@ export default function App() {
         vapiCallStatus={vapiCallStatus}
         activeCandidateCount={candidates.length}
         currentUser={currentUser}
+        isSigningIn={isSigningIn}
+        isAuthLoading={isAuthLoading}
         onSignIn={handleSignIn}
         onSignOut={handleSignOut}
       />
+
+      {/* Actionable Auth Feedback Banner */}
+      {authError && (
+        <div
+          role="alert"
+          className="max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 pt-4"
+        >
+          <div
+            className={`rounded-xl border px-4 py-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-lg ${
+              authError.isCancellation
+                ? 'bg-amber-500/10 border-amber-500/30 text-amber-200'
+                : 'bg-rose-500/10 border-rose-500/40 text-rose-200'
+            }`}
+          >
+            <div className="flex items-start gap-2.5 text-xs">
+              <ShieldAlert
+                className={`w-4 h-4 mt-0.5 shrink-0 ${
+                  authError.isCancellation ? 'text-amber-400' : 'text-rose-400'
+                }`}
+              />
+              <div>
+                <p className="font-bold text-white">{authError.title}</p>
+                <p className="text-slate-200 mt-0.5">{authError.message}</p>
+                {authError.actionHint && (
+                  <p className="text-slate-400 mt-1">{authError.actionHint}</p>
+                )}
+              </div>
+            </div>
+            <div className="flex items-center gap-2 shrink-0 self-end sm:self-center">
+              <button
+                type="button"
+                onClick={handleSignIn}
+                disabled={isSigningIn}
+                className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-white text-slate-900 hover:bg-slate-100 transition cursor-pointer"
+              >
+                Retry Sign-In
+              </button>
+              <button
+                type="button"
+                onClick={() => setAuthError(null)}
+                aria-label="Dismiss authentication alert"
+                className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800/60 transition cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Main Container */}
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6">
