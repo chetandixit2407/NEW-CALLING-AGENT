@@ -48,25 +48,25 @@ export const FollowupQueueTab: React.FC<FollowupQueueTabProps> = ({
   );
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-6">
       {/* 0. Scheduled AI Calls Section (Featured Auto-Trigger Queue) */}
-      <div className="bg-[#0f182c] border border-amber-500/30 rounded-2xl p-5 shadow-xl">
+      <div className="bg-[#0f182c] border border-amber-500/30 rounded-2xl p-4 sm:p-5 shadow-xl">
         <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
-          <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-lg bg-amber-500/20 text-amber-400 border border-amber-500/40 flex items-center justify-center shadow-xs">
+          <div className="flex items-start sm:items-center gap-2.5 min-w-0">
+            <div className="w-8 h-8 rounded-lg bg-amber-500/20 text-amber-400 border border-amber-500/40 flex items-center justify-center shadow-xs shrink-0">
               <Calendar className="w-4 h-4" />
             </div>
-            <div>
-              <div className="flex items-center gap-2">
+            <div className="min-w-0">
+              <div className="flex items-center flex-wrap gap-2">
                 <h3 className="text-sm font-bold text-white uppercase tracking-wider">
                   Scheduled AI Auto-Trigger Calls ({scheduledCandidates.length})
                 </h3>
-                <span className="px-2 py-0.5 text-[10px] font-bold rounded-md bg-amber-500/10 text-amber-400 border border-amber-500/20 uppercase tracking-wide">
+                <span className="px-2 py-0.5 text-[10px] font-bold rounded-md bg-amber-500/10 text-amber-400 border border-amber-500/20 uppercase tracking-wide shrink-0">
                   Live Queue
                 </span>
               </div>
-              <p className="text-xs text-slate-400">
-                Calls queued for Arjun to place automatically at the designated date & time
+              <p className="text-xs text-slate-400 mt-0.5">
+                Calls queued for Arjun to place automatically at the designated date &amp; time
               </p>
             </div>
           </div>
@@ -83,58 +83,58 @@ export const FollowupQueueTab: React.FC<FollowupQueueTabProps> = ({
               return (
                 <div
                   key={cand.id}
-                  className="p-4 rounded-xl bg-slate-900 border border-amber-500/40 flex flex-col justify-between shadow-md"
+                  className="min-w-0 p-4 rounded-xl bg-slate-900 border border-amber-500/40 flex flex-col justify-between shadow-md"
                 >
-                  <div>
-                    <div className="flex items-start justify-between">
-                      <div>
-                        <h4 className="text-sm font-bold text-white flex items-center gap-2">
+                  <div className="min-w-0">
+                    <div className="flex items-start justify-between gap-2 flex-wrap">
+                      <div className="min-w-0">
+                        <h4 className="text-sm font-bold text-white flex items-center gap-2 flex-wrap">
                           <span>{cand.name}</span>
-                          <span className="w-2 h-2 rounded-full bg-amber-400 animate-ping inline-block" />
+                          <span className="w-2 h-2 rounded-full bg-amber-400 animate-ping inline-block shrink-0" />
                         </h4>
-                        <p className="text-xs text-amber-400">{cand.appliedRole}</p>
+                        <p className="text-xs text-amber-400 break-words">{cand.appliedRole}</p>
                         <p className="text-[11px] text-slate-400 font-mono mt-0.5">{cand.phone}</p>
                       </div>
-                      <span className="px-2 py-0.5 text-[10px] font-bold bg-amber-500/20 text-amber-300 rounded border border-amber-500/40">
+                      <span className="px-2 py-0.5 text-[10px] font-bold bg-amber-500/20 text-amber-300 rounded border border-amber-500/40 shrink-0">
                         {sched.scenario.toUpperCase()}
                       </span>
                     </div>
 
                     <div className="mt-3 p-2.5 rounded-lg bg-amber-950/30 border border-amber-500/30 text-xs text-amber-200">
                       <div className="flex items-center gap-1.5 font-semibold text-amber-300">
-                        <Clock className="w-3.5 h-3.5 text-amber-400" />
+                        <Clock className="w-3.5 h-3.5 text-amber-400 shrink-0" />
                         <span>Auto-Trigger Time: {sched.date} at {sched.time}</span>
                       </div>
                       {sched.notes && (
-                        <div className="text-[11px] text-slate-300 mt-1 italic">
-                          "{sched.notes}"
+                        <div className="text-[11px] text-slate-300 mt-1 italic break-words">
+                          &quot;{sched.notes}&quot;
                         </div>
                       )}
                     </div>
                   </div>
 
-                  <div className="mt-4 pt-3 border-t border-slate-800 flex items-center justify-between gap-2">
+                  <div className="mt-4 pt-3 border-t border-slate-800 flex items-center justify-between gap-2 flex-wrap">
                     <button
                       onClick={() => onSelectCandidate(cand)}
-                      className="text-xs text-slate-400 hover:text-white"
+                      className="text-xs text-slate-400 hover:text-white cursor-pointer"
                     >
                       View Dossier
                     </button>
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 flex-wrap">
                       {onOpenScheduleCall && (
                         <button
                           onClick={() => onOpenScheduleCall(cand)}
-                          className="text-xs text-amber-400 hover:text-amber-300 px-2.5 py-1.5 rounded-lg bg-slate-800 border border-slate-700 font-medium transition"
+                          className="text-xs text-amber-400 hover:text-amber-300 px-2.5 py-1.5 rounded-lg bg-slate-800 border border-slate-700 font-medium transition cursor-pointer"
                         >
                           Reschedule
                         </button>
                       )}
                       <button
                         onClick={() => onTriggerCall(cand, sched.scenario)}
-                        className="inline-flex items-center gap-1.5 text-xs font-semibold bg-amber-500 hover:bg-amber-400 text-slate-950 px-3 py-1.5 rounded-lg transition shadow-md shadow-amber-500/20 font-bold"
+                        className="inline-flex items-center gap-1.5 text-xs font-bold bg-amber-500 hover:bg-amber-400 text-slate-950 px-3 py-1.5 rounded-lg transition shadow-md shadow-amber-500/20 cursor-pointer"
                         title="Trigger now without waiting for timer"
                       >
-                        <PhoneCall className="w-3.5 h-3.5" />
+                        <PhoneCall className="w-3.5 h-3.5 shrink-0" />
                         <span>Trigger Now</span>
                       </button>
                     </div>
@@ -145,18 +145,19 @@ export const FollowupQueueTab: React.FC<FollowupQueueTabProps> = ({
           </div>
         )}
       </div>
+
       {/* 1. Callback Requests Section */}
-      <div className="bg-[#0f182c] border border-slate-800 rounded-2xl p-5 shadow-xl">
-        <div className="flex items-center justify-between mb-4">
-          <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-lg bg-purple-500/20 text-purple-400 border border-purple-500/30 flex items-center justify-center">
+      <div className="bg-[#0f182c] border border-slate-800 rounded-2xl p-4 sm:p-5 shadow-xl">
+        <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
+          <div className="flex items-start sm:items-center gap-2.5 min-w-0">
+            <div className="w-8 h-8 rounded-lg bg-purple-500/20 text-purple-400 border border-purple-500/30 flex items-center justify-center shrink-0">
               <Clock className="w-4 h-4" />
             </div>
-            <div>
+            <div className="min-w-0">
               <h3 className="text-sm font-bold text-white uppercase tracking-wider">
                 Candidate Callback Requests ({callbackCandidates.length})
               </h3>
-              <p className="text-xs text-slate-400">
+              <p className="text-xs text-slate-400 mt-0.5">
                 Candidates who requested a call later (e.g. driving, in meeting, after office hours)
               </p>
             </div>
@@ -172,38 +173,38 @@ export const FollowupQueueTab: React.FC<FollowupQueueTabProps> = ({
             {callbackCandidates.map((cand) => (
               <div
                 key={cand.id}
-                className="p-4 rounded-xl bg-slate-900 border border-purple-500/30 flex flex-col justify-between"
+                className="min-w-0 p-4 rounded-xl bg-slate-900 border border-purple-500/30 flex flex-col justify-between"
               >
-                <div>
-                  <div className="flex items-start justify-between">
-                    <div>
-                      <h4 className="text-sm font-bold text-white">{cand.name}</h4>
-                      <p className="text-xs text-amber-400">{cand.appliedRole}</p>
+                <div className="min-w-0">
+                  <div className="flex items-start justify-between gap-2 flex-wrap">
+                    <div className="min-w-0">
+                      <h4 className="text-sm font-bold text-white break-words">{cand.name}</h4>
+                      <p className="text-xs text-amber-400 break-words">{cand.appliedRole}</p>
                       <p className="text-[11px] text-slate-400 font-mono mt-0.5">{cand.phone}</p>
                     </div>
-                    <span className="px-2 py-0.5 text-[10px] font-semibold bg-purple-500/20 text-purple-300 rounded border border-purple-500/30">
+                    <span className="px-2 py-0.5 text-[10px] font-semibold bg-purple-500/20 text-purple-300 rounded border border-purple-500/30 shrink-0">
                       Callback Needed
                     </span>
                   </div>
 
-                  <div className="mt-3 p-2.5 rounded-lg bg-purple-950/20 border border-purple-500/20 text-xs text-purple-200">
+                  <div className="mt-3 p-2.5 rounded-lg bg-purple-950/20 border border-purple-500/20 text-xs text-purple-200 break-words">
                     <strong className="text-purple-300">Requested Time:</strong> {cand.callbackTime || 'Later today'}
                     {cand.notes && <div className="text-[11px] text-slate-300 mt-1">{cand.notes}</div>}
                   </div>
                 </div>
 
-                <div className="mt-4 pt-3 border-t border-slate-800 flex items-center justify-between gap-2">
+                <div className="mt-4 pt-3 border-t border-slate-800 flex items-center justify-between gap-2 flex-wrap">
                   <button
                     onClick={() => onSelectCandidate(cand)}
-                    className="text-xs text-slate-400 hover:text-white"
+                    className="text-xs text-slate-400 hover:text-white cursor-pointer"
                   >
                     View Details
                   </button>
                   <button
                     onClick={() => onTriggerCall(cand, 'callback_followup')}
-                    className="inline-flex items-center gap-1.5 text-xs font-semibold bg-purple-600 hover:bg-purple-500 text-white px-3.5 py-1.5 rounded-lg transition shadow-md shadow-purple-600/20"
+                    className="inline-flex items-center gap-1.5 text-xs font-semibold bg-purple-600 hover:bg-purple-500 text-white px-3.5 py-1.5 rounded-lg transition shadow-md shadow-purple-600/20 cursor-pointer"
                   >
-                    <PhoneCall className="w-3.5 h-3.5" />
+                    <PhoneCall className="w-3.5 h-3.5 shrink-0" />
                     <span>Call Back Now</span>
                   </button>
                 </div>
@@ -214,17 +215,17 @@ export const FollowupQueueTab: React.FC<FollowupQueueTabProps> = ({
       </div>
 
       {/* 2. Missed Interviews Follow-up Section */}
-      <div className="bg-[#0f182c] border border-slate-800 rounded-2xl p-5 shadow-xl">
-        <div className="flex items-center justify-between mb-4">
-          <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-lg bg-rose-500/20 text-rose-400 border border-rose-500/30 flex items-center justify-center">
+      <div className="bg-[#0f182c] border border-slate-800 rounded-2xl p-4 sm:p-5 shadow-xl">
+        <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
+          <div className="flex items-start sm:items-center gap-2.5 min-w-0">
+            <div className="w-8 h-8 rounded-lg bg-rose-500/20 text-rose-400 border border-rose-500/30 flex items-center justify-center shrink-0">
               <CalendarClock className="w-4 h-4" />
             </div>
-            <div>
+            <div className="min-w-0">
               <h3 className="text-sm font-bold text-white uppercase tracking-wider">
                 Missed Interview Follow-ups ({missedCandidates.length})
               </h3>
-              <p className="text-xs text-slate-400">
+              <p className="text-xs text-slate-400 mt-0.5">
                 Candidates who did not attend their scheduled face-to-face round at Sector 67 Gurugram HQ (M3M Urbana)
               </p>
             </div>
@@ -240,21 +241,21 @@ export const FollowupQueueTab: React.FC<FollowupQueueTabProps> = ({
             {missedCandidates.map((cand) => (
               <div
                 key={cand.id}
-                className="p-4 rounded-xl bg-slate-900 border border-rose-500/30 flex flex-col justify-between"
+                className="min-w-0 p-4 rounded-xl bg-slate-900 border border-rose-500/30 flex flex-col justify-between"
               >
-                <div>
-                  <div className="flex items-start justify-between">
-                    <div>
-                      <h4 className="text-sm font-bold text-white">{cand.name}</h4>
-                      <p className="text-xs text-amber-400">{cand.appliedRole}</p>
+                <div className="min-w-0">
+                  <div className="flex items-start justify-between gap-2 flex-wrap">
+                    <div className="min-w-0">
+                      <h4 className="text-sm font-bold text-white break-words">{cand.name}</h4>
+                      <p className="text-xs text-amber-400 break-words">{cand.appliedRole}</p>
                       <p className="text-[11px] text-slate-400 font-mono mt-0.5">{cand.phone}</p>
                     </div>
-                    <span className="px-2 py-0.5 text-[10px] font-semibold bg-rose-500/20 text-rose-300 rounded border border-rose-500/30">
+                    <span className="px-2 py-0.5 text-[10px] font-semibold bg-rose-500/20 text-rose-300 rounded border border-rose-500/30 shrink-0">
                       Missed F2F
                     </span>
                   </div>
 
-                  <div className="mt-3 p-2.5 rounded-lg bg-rose-950/20 border border-rose-500/20 text-xs text-rose-200">
+                  <div className="mt-3 p-2.5 rounded-lg bg-rose-950/20 border border-rose-500/20 text-xs text-rose-200 break-words">
                     <strong className="text-rose-300">Missed Slot:</strong> {cand.screening?.preferredInterviewSlot || 'Yesterday'}
                     <div className="text-[11px] text-slate-300 mt-1">
                       {cand.notes || 'Automated follow-up required to check availability and propose open slots.'}
@@ -265,26 +266,26 @@ export const FollowupQueueTab: React.FC<FollowupQueueTabProps> = ({
                 <div className="mt-4 pt-3 border-t border-slate-800 flex items-center justify-between gap-2 flex-wrap">
                   <button
                     onClick={() => onSelectCandidate(cand)}
-                    className="text-xs text-slate-400 hover:text-white"
+                    className="text-xs text-slate-400 hover:text-white cursor-pointer"
                   >
                     View Details
                   </button>
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 flex-wrap">
                     {onOpenWhatsApp && (
                       <button
                         onClick={() => onOpenWhatsApp(cand, 'missed_followup')}
-                        className="inline-flex items-center gap-1.5 text-xs font-semibold bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-300 border border-emerald-500/30 px-3 py-1.5 rounded-lg transition"
+                        className="inline-flex items-center gap-1.5 text-xs font-semibold bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-300 border border-emerald-500/30 px-3 py-1.5 rounded-lg transition cursor-pointer"
                         title="Send WhatsApp reschedule message"
                       >
-                        <MessageSquare className="w-3.5 h-3.5 text-emerald-400" />
+                        <MessageSquare className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
                         <span>Send WhatsApp</span>
                       </button>
                     )}
                     <button
                       onClick={() => onTriggerCall(cand, 'missed_followup')}
-                      className="inline-flex items-center gap-1.5 text-xs font-semibold bg-rose-600 hover:bg-rose-500 text-white px-3.5 py-1.5 rounded-lg transition shadow-md shadow-rose-600/20"
+                      className="inline-flex items-center gap-1.5 text-xs font-semibold bg-rose-600 hover:bg-rose-500 text-white px-3.5 py-1.5 rounded-lg transition shadow-md shadow-rose-600/20 cursor-pointer"
                     >
-                      <PhoneCall className="w-3.5 h-3.5" />
+                      <PhoneCall className="w-3.5 h-3.5 shrink-0" />
                       <span>Reschedule Follow-up Call</span>
                     </button>
                   </div>
@@ -296,17 +297,17 @@ export const FollowupQueueTab: React.FC<FollowupQueueTabProps> = ({
       </div>
 
       {/* 3. Unanswered Calls Queue */}
-      <div className="bg-[#0f182c] border border-slate-800 rounded-2xl p-5 shadow-xl">
-        <div className="flex items-center justify-between mb-4">
-          <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-lg bg-amber-500/20 text-amber-400 border border-amber-500/30 flex items-center justify-center">
+      <div className="bg-[#0f182c] border border-slate-800 rounded-2xl p-4 sm:p-5 shadow-xl">
+        <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
+          <div className="flex items-start sm:items-center gap-2.5 min-w-0">
+            <div className="w-8 h-8 rounded-lg bg-amber-500/20 text-amber-400 border border-amber-500/30 flex items-center justify-center shrink-0">
               <PhoneMissed className="w-4 h-4" />
             </div>
-            <div>
+            <div className="min-w-0">
               <h3 className="text-sm font-bold text-white uppercase tracking-wider">
-                Unanswered Calls & Retries ({unansweredCandidates.length})
+                Unanswered Calls &amp; Retries ({unansweredCandidates.length})
               </h3>
-              <p className="text-xs text-slate-400">
+              <p className="text-xs text-slate-400 mt-0.5">
                 Calls where the candidate did not answer (Max 3 automated attempts before manual review)
               </p>
             </div>
@@ -322,21 +323,21 @@ export const FollowupQueueTab: React.FC<FollowupQueueTabProps> = ({
             {unansweredCandidates.map((cand) => (
               <div
                 key={cand.id}
-                className="p-4 rounded-xl bg-slate-900 border border-amber-500/30 flex flex-col justify-between"
+                className="min-w-0 p-4 rounded-xl bg-slate-900 border border-amber-500/30 flex flex-col justify-between"
               >
-                <div>
-                  <div className="flex items-start justify-between">
-                    <div>
-                      <h4 className="text-sm font-bold text-white">{cand.name}</h4>
-                      <p className="text-xs text-amber-400">{cand.appliedRole}</p>
+                <div className="min-w-0">
+                  <div className="flex items-start justify-between gap-2 flex-wrap">
+                    <div className="min-w-0">
+                      <h4 className="text-sm font-bold text-white break-words">{cand.name}</h4>
+                      <p className="text-xs text-amber-400 break-words">{cand.appliedRole}</p>
                       <p className="text-[11px] text-slate-400 font-mono mt-0.5">{cand.phone}</p>
                     </div>
-                    <span className="px-2 py-0.5 text-[10px] font-semibold bg-amber-500/20 text-amber-300 rounded border border-amber-500/30">
+                    <span className="px-2 py-0.5 text-[10px] font-semibold bg-amber-500/20 text-amber-300 rounded border border-amber-500/30 shrink-0">
                       Attempt {cand.unansweredAttempts}/3
                     </span>
                   </div>
 
-                  <div className="mt-3 p-2.5 rounded-lg bg-slate-950/60 border border-slate-800 text-xs text-slate-300">
+                  <div className="mt-3 p-2.5 rounded-lg bg-slate-950/60 border border-slate-800 text-xs text-slate-300 break-words">
                     <div>Last call attempt: <span className="text-slate-200 font-mono">{cand.lastCallDate || 'Today'}</span></div>
                     <div className="text-[11px] text-slate-400 mt-1">{cand.notes}</div>
                   </div>
@@ -345,26 +346,26 @@ export const FollowupQueueTab: React.FC<FollowupQueueTabProps> = ({
                 <div className="mt-4 pt-3 border-t border-slate-800 flex items-center justify-between gap-2 flex-wrap">
                   <button
                     onClick={() => onSelectCandidate(cand)}
-                    className="text-xs text-slate-400 hover:text-white"
+                    className="text-xs text-slate-400 hover:text-white cursor-pointer"
                   >
                     Profile
                   </button>
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 flex-wrap">
                     {onOpenWhatsApp && (
                       <button
                         onClick={() => onOpenWhatsApp(cand, 'unanswered')}
-                        className="inline-flex items-center gap-1.5 text-xs font-semibold bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-300 border border-emerald-500/30 px-3 py-1.5 rounded-lg transition"
+                        className="inline-flex items-center gap-1.5 text-xs font-semibold bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-300 border border-emerald-500/30 px-3 py-1.5 rounded-lg transition cursor-pointer"
                         title="Send WhatsApp message regarding missed call"
                       >
-                        <MessageSquare className="w-3.5 h-3.5 text-emerald-400" />
+                        <MessageSquare className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
                         <span>Send WhatsApp Msg</span>
                       </button>
                     )}
                     <button
                       onClick={() => onTriggerCall(cand, 'screening')}
-                      className="inline-flex items-center gap-1.5 text-xs font-semibold bg-amber-500 hover:bg-amber-400 text-slate-950 px-3.5 py-1.5 rounded-lg transition shadow-md shadow-amber-500/20"
+                      className="inline-flex items-center gap-1.5 text-xs font-semibold bg-amber-500 hover:bg-amber-400 text-slate-950 px-3.5 py-1.5 rounded-lg transition shadow-md shadow-amber-500/20 cursor-pointer"
                     >
-                      <RefreshCw className="w-3.5 h-3.5" />
+                      <RefreshCw className="w-3.5 h-3.5 shrink-0" />
                       <span>Retry Call (Attempt {cand.unansweredAttempts + 1})</span>
                     </button>
                   </div>
@@ -376,22 +377,22 @@ export const FollowupQueueTab: React.FC<FollowupQueueTabProps> = ({
       </div>
 
       {/* 4. Declined / Stop Follow-ups Section */}
-      <div className="bg-[#0f182c] border border-slate-800 rounded-2xl p-5 shadow-xl">
-        <div className="flex items-center justify-between mb-4">
-          <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-lg bg-slate-700/40 text-slate-400 border border-slate-600 flex items-center justify-center">
+      <div className="bg-[#0f182c] border border-slate-800 rounded-2xl p-4 sm:p-5 shadow-xl">
+        <div className="flex items-start sm:items-center justify-between mb-4 flex-wrap gap-2">
+          <div className="flex items-start sm:items-center gap-2.5 min-w-0">
+            <div className="w-8 h-8 rounded-lg bg-slate-700/40 text-slate-400 border border-slate-600 flex items-center justify-center shrink-0">
               <UserX className="w-4 h-4" />
             </div>
-            <div>
+            <div className="min-w-0">
               <h3 className="text-sm font-bold text-white uppercase tracking-wider">
                 Declined by Candidate • Automated Follow-ups Stopped ({declinedCandidates.length})
               </h3>
-              <p className="text-xs text-slate-400">
+              <p className="text-xs text-slate-400 mt-0.5">
                 System rule strictly enforces: When candidate declines or expresses no interest, all outreach is permanently stopped.
               </p>
             </div>
           </div>
-          <span className="text-xs px-2.5 py-1 rounded bg-slate-800 text-slate-400 border border-slate-700 font-medium">
+          <span className="text-xs px-2.5 py-1 rounded bg-slate-800 text-slate-400 border border-slate-700 font-medium shrink-0">
             Compliance Enforced
           </span>
         </div>
@@ -405,30 +406,30 @@ export const FollowupQueueTab: React.FC<FollowupQueueTabProps> = ({
             {declinedCandidates.map((cand) => (
               <div
                 key={cand.id}
-                className="p-4 rounded-xl bg-slate-900/60 border border-slate-800 flex flex-col justify-between"
+                className="min-w-0 p-4 rounded-xl bg-slate-900/60 border border-slate-800 flex flex-col justify-between"
               >
-                <div>
-                  <div className="flex items-start justify-between">
-                    <div>
-                      <h4 className="text-sm font-bold text-slate-300">{cand.name}</h4>
-                      <p className="text-xs text-slate-400">{cand.appliedRole}</p>
+                <div className="min-w-0">
+                  <div className="flex items-start justify-between gap-2 flex-wrap">
+                    <div className="min-w-0">
+                      <h4 className="text-sm font-bold text-slate-300 break-words">{cand.name}</h4>
+                      <p className="text-xs text-slate-400 break-words">{cand.appliedRole}</p>
                       <p className="text-[11px] text-slate-500 font-mono mt-0.5">{cand.phone}</p>
                     </div>
-                    <span className="px-2 py-0.5 text-[10px] font-semibold bg-slate-800 text-slate-400 rounded border border-slate-700">
+                    <span className="px-2 py-0.5 text-[10px] font-semibold bg-slate-800 text-slate-400 rounded border border-slate-700 shrink-0">
                       Do Not Call
                     </span>
                   </div>
 
-                  <div className="mt-3 p-2.5 rounded-lg bg-slate-950/60 border border-slate-800/80 text-xs text-slate-400">
+                  <div className="mt-3 p-2.5 rounded-lg bg-slate-950/60 border border-slate-800/80 text-xs text-slate-400 break-words">
                     <strong className="text-slate-300">Decline Reason:</strong> {cand.declineReason || 'Candidate is not looking for opportunities.'}
                   </div>
                 </div>
 
-                <div className="mt-4 pt-3 border-t border-slate-800/80 flex items-center justify-between text-xs text-slate-500">
+                <div className="mt-4 pt-3 border-t border-slate-800/80 flex items-center justify-between gap-2 flex-wrap text-xs text-slate-500">
                   <span>Follow-up Status: <strong className="text-rose-400">Halted</strong></span>
                   <button
                     onClick={() => onSelectCandidate(cand)}
-                    className="text-amber-400 hover:text-amber-300 text-xs"
+                    className="text-amber-400 hover:text-amber-300 text-xs cursor-pointer"
                   >
                     View Audit Log
                   </button>
@@ -440,20 +441,20 @@ export const FollowupQueueTab: React.FC<FollowupQueueTabProps> = ({
       </div>
 
       {/* 5. Talent Pipeline & Joined Other Firm Nurturing Queue */}
-      <div className="bg-[#0f182c] border border-emerald-500/30 rounded-2xl p-5 shadow-xl">
-        <div className="flex items-center justify-between mb-4">
-          <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-lg bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 flex items-center justify-center">
+      <div className="bg-[#0f182c] border border-emerald-500/30 rounded-2xl p-4 sm:p-5 shadow-xl">
+        <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
+          <div className="flex items-start sm:items-center gap-2.5 min-w-0">
+            <div className="w-8 h-8 rounded-lg bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 flex items-center justify-center shrink-0">
               <Building2 className="w-4 h-4" />
             </div>
-            <div>
-              <h3 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2">
+            <div className="min-w-0">
+              <h3 className="text-sm font-bold text-white uppercase tracking-wider flex items-center flex-wrap gap-2">
                 <span>Talent Pipeline • Joined Other Firm ({pipelineCandidates.length})</span>
-                <span className="text-[10px] font-normal px-2 py-0.5 rounded-full bg-emerald-950/60 text-emerald-300 border border-emerald-500/30">
+                <span className="text-[10px] font-normal px-2 py-0.5 rounded-full bg-emerald-950/60 text-emerald-300 border border-emerald-500/30 shrink-0">
                   90-Day Nurturing
                 </span>
               </h3>
-              <p className="text-xs text-slate-400">
+              <p className="text-xs text-slate-400 mt-0.5">
                 Candidates who recently joined another company. The AI has categorized them, logged their current package, and scheduled strategic re-engagement alerts.
               </p>
             </div>
@@ -469,16 +470,16 @@ export const FollowupQueueTab: React.FC<FollowupQueueTabProps> = ({
             {pipelineCandidates.map((cand) => (
               <div
                 key={cand.id}
-                className="p-4 rounded-xl bg-slate-900 border border-emerald-500/30 flex flex-col justify-between hover:border-emerald-500/50 transition"
+                className="min-w-0 p-4 rounded-xl bg-slate-900 border border-emerald-500/30 flex flex-col justify-between hover:border-emerald-500/50 transition"
               >
-                <div>
-                  <div className="flex items-start justify-between">
-                    <div>
-                      <h4 className="text-sm font-bold text-white">{cand.name}</h4>
-                      <p className="text-xs text-amber-400">{cand.appliedRole}</p>
+                <div className="min-w-0">
+                  <div className="flex items-start justify-between gap-2 flex-wrap">
+                    <div className="min-w-0">
+                      <h4 className="text-sm font-bold text-white break-words">{cand.name}</h4>
+                      <p className="text-xs text-amber-400 break-words">{cand.appliedRole}</p>
                       <p className="text-[11px] text-slate-400 font-mono mt-0.5">{cand.phone}</p>
                     </div>
-                    <span className="px-2 py-0.5 text-[10px] font-semibold bg-emerald-500/20 text-emerald-300 rounded border border-emerald-500/30">
+                    <span className="px-2 py-0.5 text-[10px] font-semibold bg-emerald-500/20 text-emerald-300 rounded border border-emerald-500/30 shrink-0">
                       {cand.latestRemark?.category || 'Talent Pipeline'}
                     </span>
                   </div>
@@ -486,39 +487,39 @@ export const FollowupQueueTab: React.FC<FollowupQueueTabProps> = ({
                   {/* Priority Remark */}
                   {cand.latestRemark && (
                     <div className="mt-3 p-2.5 rounded-lg bg-slate-950/70 border border-slate-800 text-xs text-slate-300">
-                      <div className="flex items-center justify-between text-[10px] text-emerald-400 font-semibold mb-1">
+                      <div className="flex items-center justify-between gap-2 flex-wrap text-[10px] text-emerald-400 font-semibold mb-1">
                         <span className="flex items-center gap-1">
-                          <Bell className="w-3 h-3" />
+                          <Bell className="w-3 h-3 shrink-0" />
                           <span>Action Due: {cand.latestRemark.actionDueDate || cand.alertDueDate || '90 Days'}</span>
                         </span>
                         <span className="text-slate-400">{cand.latestRemark.priority} Priority</span>
                       </div>
-                      <p className="text-[11px] text-slate-300 leading-relaxed">
+                      <p className="text-[11px] text-slate-300 leading-relaxed break-words">
                         {cand.latestRemark.text}
                       </p>
                     </div>
                   )}
 
                   {cand.alertReason && (
-                    <div className="mt-2 text-[11px] text-slate-400 flex items-center gap-1.5">
-                      <ShieldAlert className="w-3.5 h-3.5 text-amber-400 shrink-0" />
-                      <span>{cand.alertReason}</span>
+                    <div className="mt-2 text-[11px] text-slate-400 flex items-start gap-1.5">
+                      <ShieldAlert className="w-3.5 h-3.5 text-amber-400 shrink-0 mt-0.5" />
+                      <span className="break-words">{cand.alertReason}</span>
                     </div>
                   )}
                 </div>
 
-                <div className="mt-4 pt-3 border-t border-slate-800 flex items-center justify-between gap-2">
+                <div className="mt-4 pt-3 border-t border-slate-800 flex items-center justify-between gap-2 flex-wrap">
                   <button
                     onClick={() => onSelectCandidate(cand)}
-                    className="text-xs text-slate-400 hover:text-white"
+                    className="text-xs text-slate-400 hover:text-white cursor-pointer"
                   >
                     View CRM Profile
                   </button>
                   <button
                     onClick={() => onTriggerCall(cand, 'screening')}
-                    className="inline-flex items-center gap-1.5 text-xs font-semibold bg-emerald-600 hover:bg-emerald-500 text-white px-3.5 py-1.5 rounded-lg transition shadow-md shadow-emerald-600/20"
+                    className="inline-flex items-center gap-1.5 text-xs font-semibold bg-emerald-600 hover:bg-emerald-500 text-white px-3.5 py-1.5 rounded-lg transition shadow-md shadow-emerald-600/20 cursor-pointer"
                   >
-                    <PhoneCall className="w-3.5 h-3.5" />
+                    <PhoneCall className="w-3.5 h-3.5 shrink-0" />
                     <span>Check-in Call</span>
                   </button>
                 </div>

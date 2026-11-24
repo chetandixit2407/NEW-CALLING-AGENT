@@ -503,10 +503,14 @@ export class GeminiLiveClient {
         }
         break;
 
-      case 'error':
-        console.error(`[GeminiLiveClient:${this.sessionId}] Server error:`, msg.message);
-        this.callbacks.onError(msg.message || 'Error from voice server.');
+      case 'error': {
+        const errMsg = msg.message || 'Error from voice server.';
+        console.warn(`[GeminiLiveClient:${this.sessionId}] Server status error:`, errMsg);
+        this.cleanup();
+        this.callbacks.onError(errMsg);
+        this.callbacks.onStatusChange('error');
         break;
+      }
 
       case 'session_closed':
         this.cleanup();

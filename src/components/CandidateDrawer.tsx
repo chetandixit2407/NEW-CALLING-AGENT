@@ -15,7 +15,7 @@ interface CandidateDrawerProps {
   candidate: Candidate | null;
   onClose: () => void;
   onStartCall: (candidate: Candidate, scenario?: string) => void;
-  onStartVapiCall?: (candidate: Candidate) => void;
+  onStartPstnCall?: (candidate: Candidate) => void;
   onOpenConfirmationMail?: (candidate: Candidate) => void;
   onOpenWhatsApp?: (candidate: Candidate, template?: 'unanswered' | 'interview_reminder' | 'missed_followup') => void;
   onOpenScheduleCall?: (candidate: Candidate) => void;
@@ -26,7 +26,7 @@ export const CandidateDrawer: React.FC<CandidateDrawerProps> = ({
   candidate,
   onClose,
   onStartCall,
-  onStartVapiCall,
+  onStartPstnCall,
   onOpenConfirmationMail,
   onOpenWhatsApp,
   onOpenScheduleCall,
@@ -162,11 +162,11 @@ export const CandidateDrawer: React.FC<CandidateDrawerProps> = ({
         onClick={(e) => e.stopPropagation()}
       >
         {/* Drawer Header */}
-        <div className="p-6 border-b border-slate-800 bg-[#0f172a] sticky top-0 z-10">
-          <div className="flex items-start justify-between">
-            <div>
-              <div className="flex items-center gap-3 flex-wrap">
-                <h2 className="text-xl font-bold text-white font-['Space_Grotesk']">
+        <div className="p-4 sm:p-6 border-b border-slate-800 bg-[#0f172a] sticky top-0 z-10">
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
+                <h2 className="text-lg sm:text-xl font-bold text-white font-['Space_Grotesk'] break-words">
                   {candidate.name}
                 </h2>
                 {candidate.status === 'Missed Interview - Followup' && (
@@ -185,48 +185,50 @@ export const CandidateDrawer: React.FC<CandidateDrawerProps> = ({
                   {candidate.status}
                 </span>
               </div>
-              <p className="text-sm text-amber-400 font-medium mt-1">
+              <p className="text-sm text-amber-400 font-medium mt-1 break-words">
                 {candidate.appliedRole}
               </p>
-              <div className="flex items-center gap-4 text-xs text-slate-400 mt-2 flex-wrap">
+              <div className="flex items-center gap-x-4 gap-y-1 text-xs text-slate-400 mt-2 flex-wrap">
                 <span className="flex items-center gap-1.5">
-                  <Phone className="w-3.5 h-3.5 text-slate-500" />
-                  {candidate.phone}
+                  <Phone className="w-3.5 h-3.5 text-slate-500 shrink-0" />
+                  <span>{candidate.phone}</span>
                 </span>
-                <span className="flex items-center gap-1.5">
-                  <Mail className="w-3.5 h-3.5 text-slate-500" />
-                  {candidate.email}
+                <span className="flex items-center gap-1.5 break-all">
+                  <Mail className="w-3.5 h-3.5 text-slate-500 shrink-0" />
+                  <span>{candidate.email}</span>
                 </span>
               </div>
             </div>
             <button
               onClick={onClose}
-              className="text-slate-400 hover:text-white p-2 rounded-lg bg-slate-800/80 hover:bg-slate-800 transition"
+              className="text-slate-400 hover:text-white p-2 rounded-lg bg-slate-800/80 hover:bg-slate-800 transition shrink-0 cursor-pointer"
             >
               <X className="w-5 h-5" />
             </button>
           </div>
 
           {/* Quick Call Action Bar */}
-          <div className="mt-5 flex items-center gap-2.5 flex-wrap">
-            {onStartVapiCall && (
+          <div className="mt-4 sm:mt-5 flex items-center gap-2 flex-wrap">
+            <button
+              id="btn-drawer-gemini-call"
+              onClick={() => onStartCall(candidate, 'screening')}
+              className="flex-1 min-w-[160px] flex items-center justify-center gap-2 bg-gradient-to-r from-amber-500 via-amber-600 to-amber-700 hover:from-amber-400 hover:to-amber-600 text-slate-950 px-4 py-2 rounded-lg text-xs font-bold transition shadow-md shadow-amber-500/20 active:scale-95 cursor-pointer"
+            >
+              <Sparkles className="w-3.5 h-3.5 text-slate-950" />
+              <span>Gemini Live Screening</span>
+            </button>
+
+            {onStartPstnCall && (
               <button
-                id="btn-drawer-vapi-call"
-                onClick={() => onStartVapiCall(candidate)}
-                className="flex-1 min-w-[150px] flex items-center justify-center gap-2 bg-gradient-to-r from-amber-500 via-amber-600 to-amber-700 hover:from-amber-400 hover:to-amber-600 text-slate-950 px-4 py-2 rounded-lg text-xs font-bold transition shadow-md shadow-amber-500/20 active:scale-95"
+                id="btn-drawer-pstn-call"
+                onClick={() => onStartPstnCall(candidate)}
+                className="flex items-center justify-center gap-2 bg-slate-800 hover:bg-slate-700 text-amber-300 border border-amber-500/30 px-3.5 py-2 rounded-lg text-xs font-semibold transition cursor-pointer"
+                title="Place real outbound phone call via Twilio + Gemini Voice AI"
               >
-                <Sparkles className="w-3.5 h-3.5 text-slate-950" />
-                <span>Vapi Voice Screening</span>
+                <Phone className="w-3.5 h-3.5 text-amber-400" />
+                <span>Dial Phone (PSTN)</span>
               </button>
             )}
-
-            <button
-              onClick={() => onStartCall(candidate, 'screening')}
-              className="flex items-center justify-center gap-2 bg-slate-800 hover:bg-slate-750 text-slate-200 border border-slate-700 px-3.5 py-2 rounded-lg text-xs font-semibold transition"
-            >
-              <Phone className="w-3.5 h-3.5" />
-              <span>Simulate Call</span>
-            </button>
 
             {candidate.interviewSlotId && (
               <button
@@ -319,12 +321,12 @@ export const CandidateDrawer: React.FC<CandidateDrawerProps> = ({
         </div>
 
         {/* Drawer Content */}
-        <div className="p-6 space-y-6">
+        <div className="p-4 sm:p-6 space-y-5 sm:space-y-6">
           {/* Priority Remarks & Day-by-Day Alert Banner */}
           <div className="p-4 rounded-2xl bg-gradient-to-br from-slate-900 via-slate-900 to-[#0d1629] border border-slate-800 shadow-md">
-            <div className="flex items-center justify-between gap-2 pb-3 border-b border-slate-800/80">
-              <div className="flex items-center gap-2">
-                <div className={`p-2 rounded-xl border ${
+            <div className="flex items-start sm:items-center justify-between gap-2 flex-wrap pb-3 border-b border-slate-800/80">
+              <div className="flex items-center gap-2 min-w-0">
+                <div className={`p-2 rounded-xl border shrink-0 ${
                   candidate.alertDueDate === 'Overdue'
                     ? 'bg-rose-500/20 text-rose-300 border-rose-500/40'
                     : candidate.alertDueDate === 'Today'
@@ -335,9 +337,9 @@ export const CandidateDrawer: React.FC<CandidateDrawerProps> = ({
                 }`}>
                   <Bell className="w-4 h-4" />
                 </div>
-                <div>
-                  <h4 className="text-xs font-bold uppercase tracking-wider text-slate-200 flex items-center gap-1.5">
-                    <span>Priority Remark & Day-by-Day Alert</span>
+                <div className="min-w-0">
+                  <h4 className="text-xs font-bold uppercase tracking-wider text-slate-200 flex items-center gap-1.5 flex-wrap">
+                    <span>Priority Remark &amp; Day-by-Day Alert</span>
                   </h4>
                   <span className="text-[11px] text-slate-400">
                     {candidate.alertDueDate ? `Alert Action Due: ${candidate.alertDueDate}` : 'No active due alert'}
@@ -346,7 +348,7 @@ export const CandidateDrawer: React.FC<CandidateDrawerProps> = ({
               </div>
 
               {/* Priority & Category Badges */}
-              <div className="flex items-center gap-1.5 flex-wrap justify-end">
+              <div className="flex items-center gap-1.5 flex-wrap">
                 {candidate.latestRemark?.priority && (
                   <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-extrabold uppercase tracking-wide border ${
                     candidate.latestRemark.priority === 'Urgent'
@@ -362,7 +364,7 @@ export const CandidateDrawer: React.FC<CandidateDrawerProps> = ({
                 )}
                 {candidate.latestRemark?.category && (
                   <span className="px-2.5 py-0.5 rounded-full text-[10px] font-semibold bg-slate-800 text-amber-300 border border-slate-700 flex items-center gap-1">
-                    <Tag className="w-3 h-3 text-amber-400" />
+                    <Tag className="w-3 h-3 text-amber-400 shrink-0" />
                     <span>{candidate.latestRemark.category}</span>
                   </span>
                 )}
@@ -371,20 +373,20 @@ export const CandidateDrawer: React.FC<CandidateDrawerProps> = ({
 
             {/* Active Remark Text */}
             <div className="mt-3 p-3.5 rounded-xl bg-slate-950/70 border border-slate-800 text-xs text-slate-200 leading-relaxed">
-              <div className="text-[11px] font-bold text-amber-400 mb-1 flex items-center justify-between">
+              <div className="text-[11px] font-bold text-amber-400 mb-1 flex items-center justify-between flex-wrap gap-1">
                 <span>Latest Autonomous HR Remark:</span>
                 <span className="text-[10px] text-slate-500 font-normal">
                   {candidate.latestRemark?.createdAt || candidate.lastCallDate || 'Recent'}
                 </span>
               </div>
-              <p className="text-slate-300">
+              <p className="text-slate-300 break-words">
                 {candidate.latestRemark?.text || candidate.notes || 'Screening pending. Profile awaiting initial AI voice outreach.'}
               </p>
             </div>
 
             {/* Scheduled AI Call Banner */}
             {candidate.scheduledCall && candidate.scheduledCall.status === 'pending' && (
-              <div className="mt-3 p-3 rounded-xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-between gap-3 text-xs">
+              <div className="mt-3 p-3 rounded-xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-between flex-wrap gap-3 text-xs">
                 <div className="flex items-center gap-2.5">
                   <div className="w-7 h-7 rounded-lg bg-amber-500/20 text-amber-400 flex items-center justify-center shrink-0">
                     <Clock className="w-4 h-4" />
@@ -443,7 +445,7 @@ export const CandidateDrawer: React.FC<CandidateDrawerProps> = ({
 
           {/* 7 Mandatory Screening Items Grid */}
           <div>
-            <h3 className="text-xs font-bold uppercase tracking-wider text-slate-400 mb-3 flex items-center justify-between">
+            <h3 className="text-xs font-bold uppercase tracking-wider text-slate-400 mb-3 flex items-center justify-between flex-wrap gap-1.5">
               <span>White Collar Realty Screening Checklist (7 Data Points)</span>
               <span className="text-[11px] text-amber-400 font-normal">Automated Voice Extraction</span>
             </h3>
@@ -481,12 +483,12 @@ export const CandidateDrawer: React.FC<CandidateDrawerProps> = ({
 
               {/* Item 3: Gurgaon & Dubai Property Experience */}
               <div className="p-3.5 rounded-xl bg-slate-900/90 border border-slate-800 sm:col-span-2">
-                <div className="flex items-center justify-between text-slate-400 text-xs mb-1.5">
+                <div className="flex items-center justify-between flex-wrap gap-2 text-slate-400 text-xs mb-1.5">
                   <div className="flex items-center gap-2">
-                    <Award className="w-3.5 h-3.5 text-amber-400" />
-                    <span>3. Gurgaon & Dubai Property Experience</span>
+                    <Award className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                    <span>3. Gurgaon &amp; Dubai Property Experience</span>
                   </div>
-                  <div className="flex items-center gap-1.5">
+                  <div className="flex items-center gap-1.5 flex-wrap">
                     <span className={`px-2 py-0.5 rounded text-[10px] font-semibold ${
                       s.gurgaonDubaiExperience?.gurgaon ? 'bg-emerald-500/20 text-emerald-300' : 'bg-slate-800 text-slate-500'
                     }`}>
@@ -623,26 +625,26 @@ export const CandidateDrawer: React.FC<CandidateDrawerProps> = ({
 
           {/* AI HR Brain Persistent Memory Card (Rule 1, 4, 5, 9) */}
           <div className="p-4 rounded-xl bg-gradient-to-br from-[#0c1424] via-slate-900 to-[#0b1220] border border-amber-500/25 shadow-md">
-            <div className="flex items-center justify-between pb-3 border-b border-slate-800/80">
-              <div className="flex items-center gap-2">
-                <div className="p-1.5 rounded-lg bg-amber-500/10 text-amber-400 border border-amber-500/30">
+            <div className="flex items-start sm:items-center justify-between flex-wrap gap-2 pb-3 border-b border-slate-800/80">
+              <div className="flex items-center gap-2 min-w-0">
+                <div className="p-1.5 rounded-lg bg-amber-500/10 text-amber-400 border border-amber-500/30 shrink-0">
                   <Brain className="w-4 h-4" />
                 </div>
-                <div>
-                  <h4 className="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-1.5">
+                <div className="min-w-0">
+                  <h4 className="text-xs font-bold text-white uppercase tracking-wider flex items-center flex-wrap gap-1.5">
                     <span>Central AI HR Brain Memory</span>
-                    <span className="px-1.5 py-0.2 rounded text-[9px] bg-emerald-500/20 text-emerald-300 font-normal">
+                    <span className="px-1.5 py-0.5 rounded text-[9px] bg-emerald-500/20 text-emerald-300 font-normal">
                       Persistent
                     </span>
                   </h4>
                   <p className="text-[10px] text-slate-400">
-                    Source provenance & zero-repetition verified attributes
+                    Source provenance &amp; zero-repetition verified attributes
                   </p>
                 </div>
               </div>
               <button
                 onClick={() => setShowBrainMemory(!showBrainMemory)}
-                className="text-[11px] text-amber-400 hover:text-amber-300 font-semibold"
+                className="text-[11px] text-amber-400 hover:text-amber-300 font-semibold shrink-0 cursor-pointer"
               >
                 {showBrainMemory ? 'Hide Details' : 'Show Details'}
               </button>
@@ -730,14 +732,14 @@ export const CandidateDrawer: React.FC<CandidateDrawerProps> = ({
 
           {/* HR Manual Notes & Live Call Log Section (Persisted to Firestore immediately) */}
           <div className="p-4 rounded-xl bg-gradient-to-br from-[#0d1627] via-slate-900 to-[#0b1220] border border-amber-500/30 shadow-lg">
-            <div className="flex items-center justify-between pb-3 border-b border-slate-800">
-              <div className="flex items-center gap-2.5">
-                <div className="p-1.5 rounded-lg bg-amber-500/20 text-amber-400 border border-amber-500/40">
+            <div className="flex items-start sm:items-center justify-between flex-wrap gap-2 pb-3 border-b border-slate-800">
+              <div className="flex items-center gap-2.5 min-w-0">
+                <div className="p-1.5 rounded-lg bg-amber-500/20 text-amber-400 border border-amber-500/40 shrink-0">
                   <FileText className="w-4 h-4" />
                 </div>
-                <div>
-                  <h4 className="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-2">
-                    <span>HR Manual Notes & Call Observations</span>
+                <div className="min-w-0">
+                  <h4 className="text-xs font-bold text-white uppercase tracking-wider flex items-center flex-wrap gap-2">
+                    <span>HR Manual Notes &amp; Call Observations</span>
                     <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-500/10 text-amber-400 border border-amber-500/20">
                       Live Firestore Sync
                     </span>
@@ -749,7 +751,7 @@ export const CandidateDrawer: React.FC<CandidateDrawerProps> = ({
               </div>
 
               {/* Real-time Save Status Indicator */}
-              <div className="flex items-center gap-2 text-xs">
+              <div className="flex items-center gap-2 text-xs shrink-0">
                 {isSavingNotes ? (
                   <span className="flex items-center gap-1.5 text-amber-400 font-medium">
                     <Loader2 className="w-3.5 h-3.5 animate-spin" />
@@ -873,8 +875,8 @@ export const CandidateDrawer: React.FC<CandidateDrawerProps> = ({
                     key={call.id}
                     className="p-4 rounded-xl bg-slate-900 border border-slate-800 hover:border-slate-700 transition"
                   >
-                    <div className="flex items-center justify-between text-xs mb-2">
-                      <div className="flex items-center gap-2">
+                    <div className="flex items-center justify-between flex-wrap gap-2 text-xs mb-2">
+                      <div className="flex items-center flex-wrap gap-2">
                         <span className="font-bold text-white uppercase text-[11px] bg-slate-800 px-2 py-0.5 rounded">
                           {call.scenario} Call
                         </span>

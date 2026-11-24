@@ -70,7 +70,7 @@ export const MetricsBar: React.FC<MetricsBarProps> = ({
   ];
 
   return (
-    <div className="grid grid-cols-2 lg:grid-cols-4 gap-3.5 mb-6">
+    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5 mb-6">
       {cards.map((card) => {
         const Icon = card.icon;
         const isActive = activeFilter === card.id;
@@ -80,24 +80,24 @@ export const MetricsBar: React.FC<MetricsBarProps> = ({
             key={card.id}
             id={`metric-card-${card.id}`}
             onClick={() => onSelectFilter(card.id)}
-            className={`text-left p-4 rounded-xl border transition-all duration-200 cursor-pointer ${
+            className={`min-w-0 w-full text-left p-4 rounded-xl border transition-all duration-200 cursor-pointer flex flex-col justify-between ${
               isActive
                 ? `${card.borderColor} ${card.activeBg} ring-1 ring-amber-400/50 shadow-lg`
-                : 'bg-slate-900/80 border-slate-800 hover:border-slate-700 hover:bg-slate-850'
+                : 'bg-slate-900/80 border-slate-800 hover:border-slate-700 hover:bg-slate-800/60'
             }`}
           >
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-xs font-semibold uppercase tracking-wider text-slate-400">
+            <div className="flex items-start justify-between gap-2 mb-2 min-w-0">
+              <span className="text-xs font-semibold uppercase tracking-wider text-slate-400 leading-snug">
                 {card.title}
               </span>
-              <Icon className={`w-4 h-4 ${card.color}`} />
+              <Icon className={`w-4 h-4 shrink-0 ${card.color}`} />
             </div>
             <div className="flex items-baseline gap-2">
               <span className="text-2xl sm:text-3xl font-bold text-white font-['Space_Grotesk']">
                 {card.count}
               </span>
             </div>
-            <p className="text-[11px] text-slate-400 mt-1 truncate">
+            <p className="text-[11px] text-slate-400 mt-1 break-words">
               {card.subtitle}
             </p>
           </button>

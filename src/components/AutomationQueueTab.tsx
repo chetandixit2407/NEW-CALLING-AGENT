@@ -64,10 +64,20 @@ export const AutomationQueueTab: React.FC<AutomationQueueTabProps> = ({
   const [dryTestResults, setDryTestResults] = useState<any[] | null>(null);
   const [isSettingsOpen, setIsSettingsOpen] = useState<boolean>(false);
   const [feedbackMessage, setFeedbackMessage] = useState<string | null>(null);
+  const [telephonyConfig, setTelephonyConfig] = useState<{
+    configured: boolean;
+    missingVars: string[];
+    fromNumberMasked: string | null;
+  } | null>(null);
 
   const fetchAutomationStatus = async () => {
     try {
-      const res = await fetch('/api/automation/status');
+      const [res, qRes, telRes] = await Promise.all([
+        fetch('/api/automation/status'),
+        fetch('/api/automation/queue'),
+        fetch('/api/telephony/config'),
+      ]);
+
       if (res.ok) {
         const data = await res.json();
         setStatus(data.status);
@@ -77,10 +87,14 @@ export const AutomationQueueTab: React.FC<AutomationQueueTabProps> = ({
         if (data.settings) setSettings(data.settings);
       }
 
-      const qRes = await fetch('/api/automation/queue');
       if (qRes.ok) {
         const qData = await qRes.json();
         setQueue(qData);
+      }
+
+      if (telRes.ok) {
+        const tData = await telRes.json();
+        setTelephonyConfig(tData);
       }
     } catch (e) {
       console.warn('Failed to fetch automation status:', e);
@@ -191,9 +205,13 @@ export const AutomationQueueTab: React.FC<AutomationQueueTabProps> = ({
         body: JSON.stringify(settings),
       });
       const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data?.error || 'Failed to save automation settings.');
+      }
       setSettings(data);
+      setMode(data.automationMode || 'DRY_RUN');
       setIsSettingsOpen(false);
-      setFeedbackMessage('Automation settings saved to Firestore.');
+      setFeedbackMessage(`Automation settings saved (${data.automationMode || 'DRY_RUN'} mode).`);
     } catch (err: any) {
       setFeedbackMessage(`Error saving settings: ${err.message}`);
     } finally {
@@ -209,23 +227,40 @@ export const AutomationQueueTab: React.FC<AutomationQueueTabProps> = ({
   return (
     <div className="space-y-6">
       {/* Prominent Dry Run Safety Banner */}
-      <div className="p-4 rounded-2xl bg-gradient-to-r from-amber-500/15 via-amber-600/10 to-transparent border border-amber-500/30 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 shadow-lg">
-        <div className="flex items-center gap-3.5">
+      <div className="p-4 rounded-2xl bg-gradient-to-r from-amber-500/15 via-amber-600/10 to-transparent border border-amber-500/30 flex flex-col md:flex-row items-start md:items-center justify-between gap-4 shadow-lg">
+        <div className="flex items-start sm:items-center gap-3.5 min-w-0">
           <div className="w-10 h-10 rounded-xl bg-amber-500/20 border border-amber-500/40 text-amber-400 flex items-center justify-center shrink-0">
             <Radio className="w-5 h-5 animate-pulse" />
           </div>
-          <div>
-            <div className="flex items-center gap-2">
+          <div className="min-w-0">
+            <div className="flex items-center flex-wrap gap-2">
               <span className="text-sm font-bold text-white uppercase tracking-wider">
                 Automated Calling Queue
               </span>
-              <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/40 tracking-wide">
-                DRY RUN MODE (SIMULATION)
+              <span
+                className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold border tracking-wide shrink-0 ${
+                  mode === 'LIVE'
+                    ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40'
+                    : 'bg-amber-500/20 text-amber-300 border-amber-500/40'
+                }`}
+              >
+                {mode === 'LIVE' ? 'LIVE PSTN MODE (TWILIO + GEMINI AI)' : 'DRY RUN MODE (SIMULATION)'}
               </span>
             </div>
-            <p className="text-xs text-slate-300 mt-0.5">
-              Simulates candidate selection, calling locks, AI brain screening & post-call pipelines. 
-              <strong className="text-amber-400 font-semibold ml-1">Zero real PSTN/Vapi calls are dispatched.</strong>
+            <p className="text-xs text-slate-300 mt-1 leading-relaxed break-words">
+              {mode === 'LIVE' ? (
+                <>
+                  Places live outbound PSTN calls via Twilio Media Streams bridged to Gemini Voice AI.{' '}
+                  <strong className="text-emerald-400 font-semibold">
+                    From: {telephonyConfig?.fromNumberMasked || 'Twilio Configured'}
+                  </strong>
+                </>
+              ) : (
+                <>
+                  Simulates candidate selection, calling locks, AI brain screening &amp; post-call pipelines.{' '}
+                  <strong className="text-amber-400 font-semibold">Zero real PSTN calls are dispatched.</strong>
+                </>
+              )}
             </p>
           </div>
         </div>
@@ -277,7 +312,7 @@ export const AutomationQueueTab: React.FC<AutomationQueueTabProps> = ({
               className="flex items-center gap-2 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-bold px-4 py-2 rounded-xl text-xs transition shadow-md shadow-amber-500/20 active:scale-95 disabled:opacity-50"
             >
               <Play className="w-4 h-4 fill-slate-950" />
-              <span>START DRY RUN</span>
+              <span>{mode === 'LIVE' ? 'START LIVE CALLING' : 'START DRY RUN'}</span>
             </button>
           ) : (
             <button
@@ -338,9 +373,9 @@ export const AutomationQueueTab: React.FC<AutomationQueueTabProps> = ({
       </div>
 
       {feedbackMessage && (
-        <div className="p-3 rounded-xl bg-slate-900 border border-amber-500/30 text-xs text-amber-300 flex items-center justify-between">
-          <span>{feedbackMessage}</span>
-          <button onClick={() => setFeedbackMessage(null)} className="text-slate-400 hover:text-white">
+        <div className="p-3 rounded-xl bg-slate-900 border border-amber-500/30 text-xs text-amber-300 flex items-start sm:items-center justify-between gap-2">
+          <span className="min-w-0 break-words">{feedbackMessage}</span>
+          <button onClick={() => setFeedbackMessage(null)} className="text-slate-400 hover:text-white shrink-0 cursor-pointer">
             <X className="w-3.5 h-3.5" />
           </button>
         </div>
@@ -349,30 +384,30 @@ export const AutomationQueueTab: React.FC<AutomationQueueTabProps> = ({
       {/* Dry Test Execution Results Banner */}
       {dryTestResults && (
         <div className="p-4 rounded-2xl bg-slate-900/90 border border-indigo-500/40 space-y-3">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <Zap className="w-4 h-4 text-indigo-400" />
+          <div className="flex items-center justify-between flex-wrap gap-2">
+            <div className="flex items-center gap-2 min-w-0">
+              <Zap className="w-4 h-4 text-indigo-400 shrink-0" />
               <h4 className="text-xs font-bold text-white uppercase tracking-wider">
                 Dry Test Execution Summary ({dryTestResults.length} Simulated Calls)
               </h4>
             </div>
             <button
               onClick={() => setDryTestResults(null)}
-              className="text-slate-400 hover:text-white text-xs"
+              className="text-slate-400 hover:text-white text-xs shrink-0 cursor-pointer"
             >
               Close
             </button>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2.5">
             {dryTestResults.map((r, i) => (
-              <div key={i} className="p-3 rounded-xl bg-slate-950/60 border border-slate-800 text-xs">
-                <div className="font-bold text-white flex items-center justify-between">
-                  <span>{r.candidateName}</span>
-                  <span className="text-[10px] px-1.5 py-0.5 rounded bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">
+              <div key={i} className="min-w-0 p-3 rounded-xl bg-slate-950/60 border border-slate-800 text-xs">
+                <div className="font-bold text-white flex items-center justify-between gap-2 flex-wrap">
+                  <span className="truncate">{r.candidateName}</span>
+                  <span className="text-[10px] px-1.5 py-0.5 rounded bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 shrink-0">
                     {r.priority} Priority
                   </span>
                 </div>
-                <div className="mt-1.5 text-slate-300 flex items-center justify-between text-[11px]">
+                <div className="mt-1.5 text-slate-300 flex items-center justify-between gap-2 flex-wrap text-[11px]">
                   <span>Outcome: <strong className="text-amber-400">{r.outcome}</strong></span>
                   <span className="text-emerald-400 font-semibold">{r.status}</span>
                 </div>
@@ -383,13 +418,13 @@ export const AutomationQueueTab: React.FC<AutomationQueueTabProps> = ({
       )}
 
       {/* Daily Target Progress & Concurrency Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         {/* Daily Target Progress */}
-        <div className="p-5 rounded-2xl bg-[#0f172a] border border-slate-800 flex flex-col justify-between">
+        <div className="min-w-0 p-4 sm:p-5 rounded-2xl bg-[#0f172a] border border-slate-800 flex flex-col justify-between">
           <div>
-            <div className="flex items-center justify-between text-xs text-slate-400 mb-2">
+            <div className="flex items-center justify-between gap-2 flex-wrap text-xs text-slate-400 mb-2">
               <span className="font-semibold uppercase tracking-wider">Daily Call Target (Asia/Kolkata)</span>
-              <span className="text-amber-400 font-bold">{dailyStats.attempted} / {settings.dailyTarget}</span>
+              <span className="text-amber-400 font-bold shrink-0">{dailyStats.attempted} / {settings.dailyTarget}</span>
             </div>
             <div className="w-full h-2.5 rounded-full bg-slate-800 overflow-hidden">
               <div
@@ -398,18 +433,18 @@ export const AutomationQueueTab: React.FC<AutomationQueueTabProps> = ({
               />
             </div>
           </div>
-          <div className="mt-4 pt-3 border-t border-slate-800/80 flex items-center justify-between text-[11px] text-slate-400">
+          <div className="mt-4 pt-3 border-t border-slate-800/80 flex items-center justify-between gap-2 flex-wrap text-[11px] text-slate-400">
             <span>Remaining Capacity: {Math.max(0, settings.dailyTarget - dailyStats.attempted)} calls</span>
             <span>Calling Hours: {settings.callingWindowStart} - {settings.callingWindowEnd} IST</span>
           </div>
         </div>
 
         {/* Real-time Call Concurrency */}
-        <div className="p-5 rounded-2xl bg-[#0f172a] border border-slate-800 flex flex-col justify-between">
+        <div className="min-w-0 p-4 sm:p-5 rounded-2xl bg-[#0f172a] border border-slate-800 flex flex-col justify-between">
           <div>
-            <div className="flex items-center justify-between text-xs text-slate-400 mb-2">
+            <div className="flex items-center justify-between gap-2 flex-wrap text-xs text-slate-400 mb-2">
               <span className="font-semibold uppercase tracking-wider">Active Concurrency Lock</span>
-              <span className="text-emerald-400 font-bold">{activeCallsCount} / {settings.maxConcurrentCalls} Max</span>
+              <span className="text-emerald-400 font-bold shrink-0">{activeCallsCount} / {settings.maxConcurrentCalls} Max</span>
             </div>
             <div className="flex gap-1.5">
               {Array.from({ length: settings.maxConcurrentCalls }).map((_, idx) => (
@@ -424,14 +459,14 @@ export const AutomationQueueTab: React.FC<AutomationQueueTabProps> = ({
               ))}
             </div>
           </div>
-          <div className="mt-4 pt-3 border-t border-slate-800/80 flex items-center justify-between text-[11px] text-slate-400">
+          <div className="mt-4 pt-3 border-t border-slate-800/80 flex items-center justify-between gap-2 flex-wrap text-[11px] text-slate-400">
             <span>Protected by Firestore Transactions</span>
             <span className="text-emerald-400">Atomic Lock Active</span>
           </div>
         </div>
 
         {/* Summary Counter */}
-        <div className="p-5 rounded-2xl bg-[#0f172a] border border-slate-800 flex flex-col justify-between">
+        <div className="min-w-0 md:col-span-2 lg:col-span-1 p-4 sm:p-5 rounded-2xl bg-[#0f172a] border border-slate-800 flex flex-col justify-between">
           <div className="grid grid-cols-3 gap-2 text-center">
             <div className="p-2 rounded-xl bg-slate-950/60 border border-slate-800">
               <div className="text-[10px] text-slate-400 uppercase">Queued</div>
@@ -446,7 +481,7 @@ export const AutomationQueueTab: React.FC<AutomationQueueTabProps> = ({
               <div className="text-lg font-bold text-amber-400 mt-0.5">{dailyStats.interviewsScheduled}</div>
             </div>
           </div>
-          <div className="mt-4 pt-3 border-t border-slate-800/80 flex items-center justify-between text-[11px] text-slate-400">
+          <div className="mt-4 pt-3 border-t border-slate-800/80 flex items-center justify-between gap-2 flex-wrap text-[11px] text-slate-400">
             <span>Callbacks: {dailyStats.callbacks}</span>
             <span>No Answer/Busy: {dailyStats.noAnswer + dailyStats.busy}</span>
           </div>
@@ -454,16 +489,16 @@ export const AutomationQueueTab: React.FC<AutomationQueueTabProps> = ({
       </div>
 
       {/* Queue Table */}
-      <div className="rounded-2xl bg-[#0f172a] border border-slate-800 overflow-hidden shadow-lg">
-        <div className="p-4 border-b border-slate-800 flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <Users className="w-4 h-4 text-amber-400" />
+      <div className="rounded-2xl bg-[#0f172a] border border-slate-800 overflow-hidden shadow-lg min-w-0">
+        <div className="p-4 border-b border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+          <div className="flex items-center gap-2 min-w-0">
+            <Users className="w-4 h-4 text-amber-400 shrink-0" />
             <h3 className="text-xs font-bold text-white uppercase tracking-wider">
               Automated Calling Queue ({queue.length} Candidates Pending)
             </h3>
           </div>
           <span className="text-xs text-slate-400">
-            Prioritized by Real Estate Experience & Market Fit
+            Prioritized by Real Estate Experience &amp; Market Fit
           </span>
         </div>
 
@@ -557,8 +592,8 @@ export const AutomationQueueTab: React.FC<AutomationQueueTabProps> = ({
 
       {/* Automation Settings Modal */}
       {isSettingsOpen && (
-        <div className="fixed inset-0 bg-black/80 backdrop-blur-xs flex items-center justify-center p-4 z-50">
-          <div className="bg-[#0f172a] border border-slate-800 rounded-2xl max-w-lg w-full p-6 shadow-2xl space-y-4">
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 z-50 overflow-y-auto">
+          <div className="bg-[#0f172a] border border-slate-800 rounded-2xl max-w-lg w-full p-4 sm:p-6 shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto my-auto">
             <div className="flex items-center justify-between border-b border-slate-800 pb-3">
               <div className="flex items-center gap-2">
                 <Sliders className="w-5 h-5 text-amber-400" />
@@ -568,14 +603,38 @@ export const AutomationQueueTab: React.FC<AutomationQueueTabProps> = ({
               </div>
               <button
                 onClick={() => setIsSettingsOpen(false)}
-                className="text-slate-400 hover:text-white"
+                className="text-slate-400 hover:text-white cursor-pointer"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
             <form onSubmit={handleSaveSettings} className="space-y-4 text-xs">
-              <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-slate-400 font-semibold mb-1">
+                  Execution Mode (Gemini Voice AI + Telephony)
+                </label>
+                <select
+                  value={settings.automationMode}
+                  onChange={(e) =>
+                    setSettings({ ...settings, automationMode: e.target.value as 'DRY_RUN' | 'LIVE' })
+                  }
+                  className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-white"
+                >
+                  <option value="DRY_RUN">DRY_RUN (Safe Queue Simulation — No PSTN Calls)</option>
+                  <option value="LIVE" disabled={!telephonyConfig?.configured}>
+                    LIVE (Real Twilio PSTN + Gemini Voice AI)
+                    {!telephonyConfig?.configured ? ' — Configure Server Env Vars First' : ''}
+                  </option>
+                </select>
+                {!telephonyConfig?.configured && telephonyConfig?.missingVars && (
+                  <p className="text-[11px] text-amber-300 mt-1">
+                    Twilio PSTN missing server vars: {telephonyConfig.missingVars.join(', ')}
+                  </p>
+                )}
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="block text-slate-400 font-semibold mb-1">
                     Daily Call Target
@@ -610,7 +669,7 @@ export const AutomationQueueTab: React.FC<AutomationQueueTabProps> = ({
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="block text-slate-400 font-semibold mb-1">
                     Calling Window Start (IST)
@@ -640,7 +699,7 @@ export const AutomationQueueTab: React.FC<AutomationQueueTabProps> = ({
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="block text-slate-400 font-semibold mb-1">
                     Max Retry Attempts

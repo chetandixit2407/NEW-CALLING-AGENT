@@ -12,7 +12,7 @@ import { Header } from './components/Header';
 import { MetricsBar } from './components/MetricsBar';
 import { CandidateDrawer } from './components/CandidateDrawer';
 import { VoiceCallModal } from './components/VoiceCallModal';
-import { VapiCallModal } from './components/VapiCallModal';
+import { PstnPhoneCallModal } from './components/PstnPhoneCallModal';
 import { InterviewScheduleTab } from './components/InterviewScheduleTab';
 import { FollowupQueueTab } from './components/FollowupQueueTab';
 import { AutomationQueueTab } from './components/AutomationQueueTab';
@@ -21,7 +21,6 @@ import { ConfirmationEmailModal } from './components/ConfirmationEmailModal';
 import { WhatsAppReminderModal } from './components/WhatsAppReminderModal';
 import { AiHrBrainModal } from './components/AiHrBrainModal';
 import { ScheduleCallModal } from './components/ScheduleCallModal';
-import { vapiService, VapiCallStatus, DEFAULT_VAPI_ASSISTANT_ID } from './utils/vapiService';
 import { 
   auth, 
   ensureAuthPersistence,
@@ -50,7 +49,7 @@ export default function App() {
   const [isSigningIn, setIsSigningIn] = useState(false);
   const [authError, setAuthError] = useState<AuthUiError | null>(null);
   const [authConfig, setAuthConfig] = useState<AuthConfigStatus | null>(null);
-  const [activeTab, setActiveTab] = useState<'roster' | 'schedule' | 'followups' | 'transcripts'>('roster');
+  const [activeTab, setActiveTab] = useState<'roster' | 'schedule' | 'followups' | 'transcripts' | 'automation'>('roster');
   
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
@@ -71,18 +70,9 @@ export default function App() {
     template?: 'unanswered' | 'interview_reminder' | 'missed_followup';
   } | null>(null);
 
-  // Vapi Voice Assistant state
-  const [vapiCallStatus, setVapiCallStatus] = useState<VapiCallStatus>('idle');
-  const [vapiCandidate, setVapiCandidate] = useState<Candidate | null>(null);
-  const [showVapiModal, setShowVapiModal] = useState<boolean>(false);
-
-  // Listen to Vapi state events
-  useEffect(() => {
-    const unsub = vapiService.onStatusChange((status) => {
-      setVapiCallStatus(status);
-    });
-    return () => unsub();
-  }, []);
+  // Outbound PSTN Telephony Call state (Twilio + Gemini Live)
+  const [pstnCallCandidate, setPstnCallCandidate] = useState<Candidate | null>(null);
+  const [pstnCallScenario, setPstnCallScenario] = useState<CallScenario>('screening');
 
   // Autonomous scheduler ticker: checks every 10 seconds for scheduled AI calls due
   useEffect(() => {
@@ -98,7 +88,7 @@ export default function App() {
           ) {
             hasTriggered = true;
             // Trigger call immediately if no call is currently active
-            if (!activeCallCandidate && !showVapiModal) {
+            if (!activeCallCandidate && !pstnCallCandidate) {
               handleStartCall(c, c.scheduledCall.scenario);
             }
             return {
@@ -127,7 +117,7 @@ export default function App() {
     }, 10000);
 
     return () => clearInterval(interval);
-  }, [activeCallCandidate, showVapiModal]);
+  }, [activeCallCandidate, pstnCallCandidate]);
 
   // Initialize Auth session, redirect completion, and Firestore synchronization
   useEffect(() => {
@@ -506,28 +496,20 @@ export default function App() {
     return true;
   });
 
-  // Launch live Vapi voice assistant call
-  const handleStartVapiCall = (candidate?: Candidate) => {
-    if (vapiCallStatus === 'active' || vapiCallStatus === 'connecting') {
-      setShowVapiModal(true);
-      return;
-    }
-
+  // Launch real PSTN phone call (Twilio + Gemini Voice AI)
+  const handleStartPstnCall = (candidate?: Candidate, scenario: CallScenario = 'screening') => {
     const targetCandidate =
       candidate ||
       selectedCandidate ||
       candidates.find((c) => c.status === 'Screening Pending') ||
       candidates[0];
+    if (!targetCandidate) return;
 
-    setVapiCandidate(targetCandidate);
-    setShowVapiModal(true);
+    setPstnCallScenario(scenario);
+    setPstnCallCandidate(targetCandidate);
   };
 
-  const handleEndVapiCall = () => {
-    vapiService.stopCall();
-  };
-
-  // Launch a call simulation
+  // Launch a real-time browser Gemini Live voice call
   const handleStartCall = (candidate: Candidate, scenario: string = 'screening') => {
     setActiveCallCandidate(candidate);
     setActiveCallScenario(scenario as CallScenario);
@@ -659,17 +641,20 @@ export default function App() {
       {/* Top Header */}
       <Header
         onNewCandidate={() => setShowNewCandidateModal(true)}
-        onQuickStartCall={() => handleStartVapiCall()}
-        onStartInteractiveCall={() => {
+        onQuickStartCall={() => {
           const targetCandidate =
+            activeCallCandidate ||
             selectedCandidate ||
             candidates.find((c) => c.status === 'Screening Pending') ||
             candidates[0];
-          handleStartCall(targetCandidate, 'screening');
+          if (targetCandidate) {
+            handleStartCall(targetCandidate, 'screening');
+          }
         }}
-        onEndCall={handleEndVapiCall}
+        onStartInteractiveCall={() => handleStartPstnCall()}
+        onEndCall={() => setActiveCallCandidate(null)}
         onOpenBrainModal={() => setShowBrainModal(true)}
-        vapiCallStatus={vapiCallStatus}
+        geminiCallStatus={activeCallCandidate ? 'active' : 'idle'}
         activeCandidateCount={candidates.length}
         currentUser={currentUser}
         isSigningIn={isSigningIn}
@@ -682,7 +667,7 @@ export default function App() {
       {authError && (
         <div
           role="alert"
-          className="max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 pt-4"
+          className="max-w-[1440px] w-full mx-auto px-3 sm:px-6 lg:px-8 pt-4"
         >
           <div
             className={`rounded-xl border px-4 py-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-lg ${
@@ -728,7 +713,7 @@ export default function App() {
       )}
 
       {/* Main Container */}
-      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6">
+      <main className="flex-1 max-w-[1440px] w-full mx-auto px-3 sm:px-6 lg:px-8 py-5 sm:py-6 min-w-0">
         {/* KPI Metrics Summary */}
         <MetricsBar
           candidates={candidates}
@@ -742,118 +727,123 @@ export default function App() {
         />
 
         {/* Tab Navigation & Search Controls */}
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6 border-b border-slate-800 pb-4">
-          <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none">
+        <div className="flex flex-col gap-3.5 mb-6 border-b border-slate-800 pb-4">
+          <nav
+            aria-label="Dashboard sections"
+            className="flex items-center flex-wrap gap-2"
+          >
             <button
               id="tab-roster"
               onClick={() => {
                 setActiveTab('roster');
                 setMetricsFilter('all');
               }}
-              className={`px-4 py-2 rounded-xl text-xs font-bold transition flex items-center gap-2 shrink-0 ${
+              className={`px-3 sm:px-4 py-2 rounded-xl text-xs font-bold transition flex items-center gap-2 cursor-pointer ${
                 activeTab === 'roster'
                   ? 'bg-amber-500 text-slate-950 shadow-md shadow-amber-500/20'
                   : 'bg-slate-900/90 text-slate-400 hover:text-slate-200 border border-slate-800'
               }`}
             >
-              <Users className="w-3.5 h-3.5" />
-              <span>Candidate Roster & Screening ({candidates.length})</span>
+              <Users className="w-3.5 h-3.5 shrink-0" />
+              <span>Candidate Roster &amp; Screening ({candidates.length})</span>
             </button>
 
             <button
               id="tab-schedule"
               onClick={() => setActiveTab('schedule')}
-              className={`px-4 py-2 rounded-xl text-xs font-bold transition flex items-center gap-2 shrink-0 ${
+              className={`px-3 sm:px-4 py-2 rounded-xl text-xs font-bold transition flex items-center gap-2 cursor-pointer ${
                 activeTab === 'schedule'
                   ? 'bg-amber-500 text-slate-950 shadow-md shadow-amber-500/20'
                   : 'bg-slate-900/90 text-slate-400 hover:text-slate-200 border border-slate-800'
               }`}
             >
-              <Calendar className="w-3.5 h-3.5" />
-              <span>Interview Schedules & Slots</span>
+              <Calendar className="w-3.5 h-3.5 shrink-0" />
+              <span>Interview Schedules &amp; Slots</span>
             </button>
 
             <button
               id="tab-followups"
               onClick={() => setActiveTab('followups')}
-              className={`px-4 py-2 rounded-xl text-xs font-bold transition flex items-center gap-2 shrink-0 ${
+              className={`px-3 sm:px-4 py-2 rounded-xl text-xs font-bold transition flex items-center gap-2 cursor-pointer ${
                 activeTab === 'followups'
                   ? 'bg-amber-500 text-slate-950 shadow-md shadow-amber-500/20'
                   : 'bg-slate-900/90 text-slate-400 hover:text-slate-200 border border-slate-800'
               }`}
             >
-              <Clock className="w-3.5 h-3.5" />
+              <Clock className="w-3.5 h-3.5 shrink-0" />
               <span>Pending Follow-ups Queue</span>
             </button>
 
             <button
               id="tab-transcripts"
               onClick={() => setActiveTab('transcripts')}
-              className={`px-4 py-2 rounded-xl text-xs font-bold transition flex items-center gap-2 shrink-0 ${
+              className={`px-3 sm:px-4 py-2 rounded-xl text-xs font-bold transition flex items-center gap-2 cursor-pointer ${
                 activeTab === 'transcripts'
                   ? 'bg-amber-500 text-slate-950 shadow-md shadow-amber-500/20'
                   : 'bg-slate-900/90 text-slate-400 hover:text-slate-200 border border-slate-800'
               }`}
             >
-              <MessageSquare className="w-3.5 h-3.5" />
-              <span>Voice Logs & Transcripts</span>
+              <MessageSquare className="w-3.5 h-3.5 shrink-0" />
+              <span>Voice Logs &amp; Transcripts</span>
             </button>
 
             <button
               id="tab-automation"
               onClick={() => setActiveTab('automation')}
-              className={`px-4 py-2 rounded-xl text-xs font-bold transition flex items-center gap-2 shrink-0 ${
+              className={`px-3 sm:px-4 py-2 rounded-xl text-xs font-bold transition flex items-center gap-2 cursor-pointer ${
                 activeTab === 'automation'
                   ? 'bg-amber-500 text-slate-950 shadow-md shadow-amber-500/20'
                   : 'bg-slate-900/90 text-slate-400 hover:text-slate-200 border border-slate-800'
               }`}
             >
-              <Radio className={`w-3.5 h-3.5 ${activeTab === 'automation' ? 'text-slate-950 animate-pulse' : 'text-amber-400 animate-pulse'}`} />
+              <Radio className={`w-3.5 h-3.5 shrink-0 ${activeTab === 'automation' ? 'text-slate-950 animate-pulse' : 'text-amber-400 animate-pulse'}`} />
               <span>AI Calling Queue (Dry Run)</span>
             </button>
-          </div>
+          </nav>
 
-          {/* Search & Status Filters */}
+          {/* Search & Status Filters (Dedicated Responsive Row) */}
           {activeTab === 'roster' && (
-            <div className="flex items-center gap-2.5 flex-wrap sm:flex-nowrap">
-              <div className="relative flex-1 sm:w-64">
-                <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5">
+              <div className="relative flex-1 min-w-0">
+                <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 pointer-events-none" />
                 <input
                   type="text"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   placeholder="Search name, role, company..."
-                  className="w-full bg-slate-900 border border-slate-800 rounded-xl pl-9 pr-3.5 py-1.5 text-xs text-white placeholder:text-slate-500 focus:outline-hidden focus:border-amber-500"
+                  className="w-full bg-slate-900 border border-slate-800 rounded-xl pl-9 pr-3.5 py-2 text-xs text-white placeholder:text-slate-500 focus:outline-hidden focus:border-amber-500"
                 />
               </div>
 
-              <select
-                id="filter-status"
-                value={statusFilter}
-                onChange={(e) => setStatusFilter(e.target.value)}
-                className="bg-slate-900 border border-slate-800 rounded-xl px-3 py-1.5 text-xs text-slate-300 focus:outline-hidden focus:border-amber-500"
-              >
-                <option value="all">All Statuses</option>
-                <option value="Screening Pending">Screening Pending</option>
-                <option value="Screened - Ready for Interview">Screened</option>
-                <option value="Interview Scheduled">Interview Scheduled</option>
-                <option value="Attendance Confirmed">Attendance Confirmed</option>
-                <option value="Missed Interview - Followup">Missed Interview</option>
-                <option value="Callback Needed">Callback Needed</option>
-                <option value="Declined - Do Not Call">Declined</option>
-              </select>
+              <div className="grid grid-cols-1 sm:flex sm:items-center gap-2.5 shrink-0">
+                <select
+                  id="filter-status"
+                  value={statusFilter}
+                  onChange={(e) => setStatusFilter(e.target.value)}
+                  className="w-full sm:w-auto bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-300 focus:outline-hidden focus:border-amber-500"
+                >
+                  <option value="all">All Statuses</option>
+                  <option value="Screening Pending">Screening Pending</option>
+                  <option value="Screened - Ready for Interview">Screened</option>
+                  <option value="Interview Scheduled">Interview Scheduled</option>
+                  <option value="Attendance Confirmed">Attendance Confirmed</option>
+                  <option value="Missed Interview - Followup">Missed Interview</option>
+                  <option value="Callback Needed">Callback Needed</option>
+                  <option value="Declined - Do Not Call">Declined</option>
+                </select>
 
-              <select
-                id="filter-priority"
-                value={priorityFilter}
-                onChange={(e) => setPriorityFilter(e.target.value)}
-                className="bg-slate-900 border border-slate-800 rounded-xl px-3 py-1.5 text-xs text-slate-300 focus:outline-hidden focus:border-amber-500"
-              >
-                <option value="all">All Priorities</option>
-                <option value="high">🔴 High Priority (Missed)</option>
-                <option value="upcoming">🟡 Upcoming Slots (Amber)</option>
-                <option value="callback">🟣 Callback Due</option>
-              </select>
+                <select
+                  id="filter-priority"
+                  value={priorityFilter}
+                  onChange={(e) => setPriorityFilter(e.target.value)}
+                  className="w-full sm:w-auto bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-300 focus:outline-hidden focus:border-amber-500"
+                >
+                  <option value="all">All Priorities</option>
+                  <option value="high">🔴 High Priority (Missed)</option>
+                  <option value="upcoming">🟡 Upcoming Slots (Amber)</option>
+                  <option value="callback">🟣 Callback Due</option>
+                </select>
+              </div>
             </div>
           )}
         </div>
@@ -862,20 +852,20 @@ export default function App() {
         {activeTab === 'roster' && (
           <div className="space-y-4">
             {/* Day-by-Day Status Alert Bar */}
-            <div className="p-3.5 rounded-2xl bg-gradient-to-r from-slate-900 via-[#0d1629] to-slate-900 border border-slate-800 flex flex-col lg:flex-row lg:items-center justify-between gap-3 shadow-md">
-              <div className="flex items-center gap-2.5">
+            <div className="p-3.5 sm:p-4 rounded-2xl bg-gradient-to-r from-slate-900 via-[#0d1629] to-slate-900 border border-slate-800 flex flex-col xl:flex-row xl:items-center justify-between gap-3 shadow-md">
+              <div className="flex items-start sm:items-center gap-2.5 min-w-0">
                 <div className="p-2 rounded-xl bg-amber-500/15 border border-amber-500/30 text-amber-400 shrink-0">
                   <Bell className="w-4 h-4" />
                 </div>
-                <div>
-                  <h4 className="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-2">
+                <div className="min-w-0">
+                  <h4 className="text-xs font-bold text-white uppercase tracking-wider flex items-center flex-wrap gap-2">
                     <span>Day-by-Day Candidate Status Alerts</span>
-                    <span className="text-[10px] font-normal px-2 py-0.5 rounded-full bg-slate-800 text-amber-300 border border-slate-700">
+                    <span className="text-[10px] font-normal px-2 py-0.5 rounded-full bg-slate-800 text-amber-300 border border-slate-700 shrink-0">
                       CRM Priority Engine
                     </span>
                   </h4>
-                  <p className="text-[11px] text-slate-400">
-                    Live tracking by action due date: Overdue follow-ups, Today's callbacks, Tomorrow's F2F interviews & 90-Day Pipeline.
+                  <p className="text-[11px] text-slate-400 mt-0.5 leading-relaxed">
+                    Live tracking by action due date: Overdue follow-ups, Today&apos;s callbacks, Tomorrow&apos;s F2F interviews &amp; 90-Day Pipeline.
                   </p>
                 </div>
               </div>
@@ -885,14 +875,14 @@ export default function App() {
                 <button
                   type="button"
                   onClick={() => setDayAlertFilter('all')}
-                  className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition flex items-center gap-1.5 ${
+                  className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition flex items-center gap-1.5 cursor-pointer ${
                     dayAlertFilter === 'all'
                       ? 'bg-amber-500 text-slate-950 font-bold shadow-xs'
                       : 'bg-slate-800/80 text-slate-400 hover:text-white border border-slate-700/60'
                   }`}
                 >
                   <span>All Leads</span>
-                  <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-black/20 font-bold">
+                  <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-black/20 font-bold">
                     {candidates.length}
                   </span>
                 </button>
@@ -900,15 +890,15 @@ export default function App() {
                 <button
                   type="button"
                   onClick={() => setDayAlertFilter('overdue')}
-                  className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition flex items-center gap-1.5 ${
+                  className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition flex items-center gap-1.5 cursor-pointer ${
                     dayAlertFilter === 'overdue'
                       ? 'bg-rose-500 text-white font-bold shadow-xs shadow-rose-950'
                       : 'bg-rose-500/10 text-rose-300 hover:bg-rose-500/20 border border-rose-500/30'
                   }`}
                 >
-                  <span className="w-1.5 h-1.5 rounded-full bg-rose-400 animate-ping inline-block" />
+                  <span className="w-1.5 h-1.5 rounded-full bg-rose-400 animate-ping inline-block shrink-0" />
                   <span>🚨 Overdue</span>
-                  <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-rose-900/50 font-bold">
+                  <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-rose-900/50 font-bold">
                     {overdueCount}
                   </span>
                 </button>
@@ -916,14 +906,14 @@ export default function App() {
                 <button
                   type="button"
                   onClick={() => setDayAlertFilter('today')}
-                  className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition flex items-center gap-1.5 ${
+                  className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition flex items-center gap-1.5 cursor-pointer ${
                     dayAlertFilter === 'today'
                       ? 'bg-amber-500 text-slate-950 font-bold shadow-xs'
                       : 'bg-amber-500/10 text-amber-300 hover:bg-amber-500/20 border border-amber-500/30'
                   }`}
                 >
                   <span>📅 Today</span>
-                  <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-amber-900/40 text-amber-200 font-bold">
+                  <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-amber-900/40 text-amber-200 font-bold">
                     {todayCount}
                   </span>
                 </button>
@@ -931,14 +921,14 @@ export default function App() {
                 <button
                   type="button"
                   onClick={() => setDayAlertFilter('tomorrow')}
-                  className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition flex items-center gap-1.5 ${
+                  className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition flex items-center gap-1.5 cursor-pointer ${
                     dayAlertFilter === 'tomorrow'
                       ? 'bg-blue-500 text-white font-bold shadow-xs'
                       : 'bg-blue-500/10 text-blue-300 hover:bg-blue-500/20 border border-blue-500/30'
                   }`}
                 >
                   <span>⏰ Tomorrow</span>
-                  <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-blue-900/50 font-bold">
+                  <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-blue-900/50 font-bold">
                     {tomorrowCount}
                   </span>
                 </button>
@@ -946,14 +936,14 @@ export default function App() {
                 <button
                   type="button"
                   onClick={() => setDayAlertFilter('pipeline')}
-                  className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition flex items-center gap-1.5 ${
+                  className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition flex items-center gap-1.5 cursor-pointer ${
                     dayAlertFilter === 'pipeline'
                       ? 'bg-emerald-500 text-slate-950 font-bold shadow-xs'
                       : 'bg-emerald-500/10 text-emerald-300 hover:bg-emerald-500/20 border border-emerald-500/30'
                   }`}
                 >
                   <span>🌱 Pipeline (Joined Other Co)</span>
-                  <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-emerald-900/50 font-bold">
+                  <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-emerald-900/50 font-bold">
                     {pipelineCount}
                   </span>
                 </button>
@@ -962,26 +952,22 @@ export default function App() {
 
             <div className="flex flex-col sm:flex-row sm:items-center justify-between text-xs text-slate-400 gap-2 mb-1">
               <span>Showing {filteredCandidates.length} candidate profiles {dayAlertFilter !== 'all' && `(Filtered: ${dayAlertFilter.toUpperCase()})`}</span>
-              <div className="flex items-center gap-3">
+              <div className="flex items-center flex-wrap gap-x-3 gap-y-1">
                 <span className="inline-flex items-center gap-1 text-[11px] text-rose-300">
-                  <span className="w-2 h-2 rounded-full bg-rose-500 animate-ping inline-block" />
+                  <span className="w-2 h-2 rounded-full bg-rose-500 animate-ping inline-block shrink-0" />
                   Red = Missed Interview
                 </span>
                 <span className="inline-flex items-center gap-1 text-[11px] text-amber-300">
-                  <span className="w-2 h-2 rounded-full bg-amber-400 inline-block" />
+                  <span className="w-2 h-2 rounded-full bg-amber-400 inline-block shrink-0" />
                   Amber = Upcoming Slot
                 </span>
-                <span className="text-amber-400/90 hidden md:inline">Tap card or 'Screening Call' to launch Voice Agent</span>
+                <span className="text-amber-400/90 hidden md:inline">Tap card or &apos;Screening Call&apos; to launch Voice Agent</span>
               </div>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 items-stretch">
               {filteredCandidates.map((cand) => {
                 const s = cand.screening || {};
-                const hasREExp = s.realEstateExperienceYears !== undefined;
-                const hasSalary = s.currentSalaryLPA || s.expectedSalaryLPA;
-                const isConfirmed = cand.status === 'Attendance Confirmed';
-                const isScheduled = cand.status === 'Interview Scheduled';
                 const priority = getCandidatePriority(cand);
 
                 return (
@@ -989,84 +975,82 @@ export default function App() {
                     key={cand.id}
                     id={`candidate-card-${cand.id}`}
                     onClick={() => setSelectedCandidate(cand)}
-                    className={`p-5 rounded-2xl bg-[#0f172a] transition shadow-lg flex flex-col justify-between cursor-pointer group ${priority.cardHighlight}`}
+                    className={`min-w-0 p-4 rounded-2xl bg-[#0f172a] transition shadow-lg flex flex-col justify-between cursor-pointer group ${priority.cardHighlight}`}
                   >
-                    <div>
+                    <div className="min-w-0">
                       {/* Priority Header Row */}
-                      <div className="flex items-center justify-between gap-2 mb-3 pb-2 border-b border-slate-800/80">
-                        <div className="flex items-center gap-1.5">
-                          <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Priority:</span>
+                      <div className="flex items-center justify-between gap-1.5 flex-wrap mb-3 pb-2 border-b border-slate-800/80">
+                        <div className="flex items-center gap-1.5 min-w-0">
+                          <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider shrink-0">Priority:</span>
                           <span className={`px-2 py-0.5 text-[10px] font-bold rounded-md border flex items-center gap-1 ${priority.badgeClass}`}>
-                            <priority.icon className={`w-3 h-3 ${priority.iconColor} ${priority.pulse ? 'animate-pulse' : ''}`} />
-                            <span>{priority.label}</span>
+                            <priority.icon className={`w-3 h-3 shrink-0 ${priority.iconColor} ${priority.pulse ? 'animate-pulse' : ''}`} />
+                            <span className="truncate">{priority.label}</span>
                           </span>
                         </div>
-                        <span className={`px-2.5 py-0.5 text-[10px] font-semibold rounded-full border whitespace-nowrap ${getStatusBadge(cand.status)}`}>
+                        <span className={`px-2 py-0.5 text-[10px] font-semibold rounded-full border ${getStatusBadge(cand.status)}`}>
                           {cand.status}
                         </span>
                       </div>
 
                       {/* Top Row: Avatar & Role */}
-                      <div className="flex items-start justify-between gap-2 mb-3">
-                        <div className="flex items-center gap-3">
-                          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-amber-500/20 to-amber-700/20 border border-amber-500/30 flex items-center justify-center font-bold text-amber-400 text-sm group-hover:scale-105 transition">
-                            {cand.name.substring(0, 2).toUpperCase()}
-                          </div>
-                          <div>
-                            <h3 className="text-sm font-bold text-white group-hover:text-amber-300 transition">
-                              {cand.name}
-                            </h3>
-                            <p className="text-xs text-amber-400/90 font-medium">
-                              {cand.appliedRole}
-                            </p>
-                          </div>
+                      <div className="flex items-start gap-3 mb-3 min-w-0">
+                        <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-amber-500/20 to-amber-700/20 border border-amber-500/30 flex items-center justify-center font-bold text-amber-400 text-sm group-hover:scale-105 transition shrink-0">
+                          {cand.name.substring(0, 2).toUpperCase()}
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <h3 className="text-sm font-bold text-white group-hover:text-amber-300 transition break-words leading-snug">
+                            {cand.name}
+                          </h3>
+                          <p className="text-xs text-amber-400/90 font-medium break-words leading-snug mt-0.5">
+                            {cand.appliedRole}
+                          </p>
                         </div>
                       </div>
 
                       {/* Middle Details: Company, RE Exp, Location */}
-                      <div className="space-y-1.5 text-xs text-slate-300 my-3.5 bg-slate-950/40 p-3 rounded-xl border border-slate-800/80">
-                        <div className="flex items-center justify-between text-slate-400">
-                          <span className="flex items-center gap-1.5">
-                            <Building className="w-3.5 h-3.5 text-amber-400" />
-                            <span>Current Company:</span>
+                      <div className="space-y-2 text-xs text-slate-300 my-3 bg-slate-950/40 p-3 rounded-xl border border-slate-800/80">
+                        <div className="flex items-start justify-between gap-2 text-slate-400 min-w-0">
+                          <span className="flex items-center gap-1.5 shrink-0">
+                            <Building className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                            <span>Company:</span>
                           </span>
-                          <span className="font-semibold text-white">
+                          <span className="font-semibold text-white text-right break-words min-w-0">
                             {s.currentCompany || 'Not captured yet'}
                           </span>
                         </div>
 
-                        <div className="flex items-center justify-between text-slate-400">
-                          <span className="flex items-center gap-1.5">
-                            <Briefcase className="w-3.5 h-3.5 text-amber-400" />
-                            <span>Real Estate Experience:</span>
+                        <div className="flex items-start justify-between gap-2 text-slate-400 min-w-0">
+                          <span className="flex items-center gap-1.5 shrink-0">
+                            <Briefcase className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                            <span>RE Exp:</span>
                           </span>
-                          <span className="font-semibold text-white">
+                          <span className="font-semibold text-white text-right break-words min-w-0">
                             {s.realEstateExperienceYears 
                               ? `${s.realEstateExperienceYears} Yrs` 
                               : 'Pending'}
                           </span>
                         </div>
 
-                        <div className="flex items-center justify-between text-slate-400">
-                          <span className="flex items-center gap-1.5">
-                            <MapPin className="w-3.5 h-3.5 text-amber-400" />
+                        <div className="flex items-start justify-between gap-2 text-slate-400 min-w-0">
+                          <span className="flex items-center gap-1.5 shrink-0">
+                            <MapPin className="w-3.5 h-3.5 text-amber-400 shrink-0" />
                             <span>Location:</span>
                           </span>
-                          <span className="font-semibold text-slate-200">
+                          <span className="font-semibold text-slate-200 text-right break-words min-w-0">
                             {s.currentLocation || 'NCR'}
                           </span>
                         </div>
 
                         {/* Gurgaon/Dubai tag */}
                         {(s.gurgaonDubaiExperience?.gurgaon || s.gurgaonDubaiExperience?.dubai) && (
-                          <div className="pt-1.5 flex items-center gap-1.5">
+                          <div className="pt-1 flex items-center flex-wrap gap-1.5">
                             {s.gurgaonDubaiExperience?.gurgaon && (
-                              <span className="px-1.5 py-0.2 rounded text-[10px] font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                              <span className="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
                                 Gurgaon Luxury Exp
                               </span>
                             )}
                             {s.gurgaonDubaiExperience?.dubai && (
-                              <span className="px-1.5 py-0.2 rounded text-[10px] font-semibold bg-amber-500/10 text-amber-400 border border-amber-500/20">
+                              <span className="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-amber-500/10 text-amber-400 border border-amber-500/20">
                                 Dubai Property Exp
                               </span>
                             )}
@@ -1077,9 +1061,9 @@ export default function App() {
                       {/* Scheduled Slot if present */}
                       {cand.interviewTime && (
                         <div className="mb-3 p-2.5 rounded-lg bg-amber-950/20 border border-amber-500/20 text-xs">
-                          <div className="flex items-center justify-between font-bold text-amber-300 text-[11px]">
+                          <div className="flex items-center justify-between gap-2 flex-wrap font-bold text-amber-300 text-[11px]">
                             <span className="flex items-center gap-1.5">
-                              <Calendar className="w-3 h-3" />
+                              <Calendar className="w-3 h-3 shrink-0" />
                               <span>F2F Interview</span>
                             </span>
                             <span>{cand.interviewStatus}</span>
@@ -1093,8 +1077,8 @@ export default function App() {
                       {/* Autonomous AI Priority Remark & Day-by-Day Alert Box */}
                       {cand.latestRemark && (
                         <div className="mb-3 p-2.5 rounded-xl bg-slate-950/70 border border-slate-800/90 text-xs">
-                          <div className="flex items-center justify-between gap-1 text-[10px] mb-1">
-                            <span className="font-bold text-amber-400 flex items-center gap-1 truncate">
+                          <div className="flex items-center justify-between gap-1.5 flex-wrap text-[10px] mb-1">
+                            <span className="font-bold text-amber-400 flex items-center gap-1 min-w-0">
                               <Bell className="w-3 h-3 text-amber-400 shrink-0" />
                               <span className="truncate">{cand.latestRemark.category}</span>
                             </span>
@@ -1112,7 +1096,7 @@ export default function App() {
                               </span>
                             )}
                           </div>
-                          <p className="text-[11px] text-slate-300 line-clamp-2 leading-relaxed">
+                          <p className="text-[11px] text-slate-300 line-clamp-2 leading-relaxed break-words">
                             {cand.latestRemark.text}
                           </p>
                         </div>
@@ -1121,28 +1105,28 @@ export default function App() {
 
                     {/* Bottom Action Bar */}
                     <div 
-                      className="pt-3 border-t border-slate-800/80 flex items-center justify-between gap-1.5 flex-wrap"
+                      className="pt-3 border-t border-slate-800/80 flex items-center justify-between gap-2 flex-wrap"
                       onClick={(e) => e.stopPropagation()}
                     >
                       <button
                         onClick={() => setSelectedCandidate(cand)}
-                        className="text-xs text-slate-400 hover:text-white flex items-center gap-1"
+                        className="text-xs text-slate-400 hover:text-white flex items-center gap-1 shrink-0 cursor-pointer"
                       >
                         <span>Profile</span>
                         <ChevronRight className="w-3.5 h-3.5" />
                       </button>
 
-                      <div className="flex items-center gap-1.5">
+                      <div className="flex items-center gap-1.5 flex-wrap">
                         {/* Send Confirmation Mail button */}
                         {(cand.interviewSlotId || cand.status === 'Interview Scheduled' || cand.status === 'Attendance Confirmed') && (
                           <button
                             type="button"
                             onClick={() => setConfirmationMailCandidate(cand)}
-                            className="p-1.5 rounded-lg bg-amber-500/10 hover:bg-amber-500/25 text-amber-300 border border-amber-500/30 text-xs flex items-center gap-1 transition"
+                            className="p-1.5 rounded-lg bg-amber-500/10 hover:bg-amber-500/25 text-amber-300 border border-amber-500/30 text-xs flex items-center gap-1 transition cursor-pointer"
                             title="Send interview confirmation email with Sector 67 venue details"
                           >
-                            <Mail className="w-3.5 h-3.5 text-amber-400" />
-                            <span className="hidden xl:inline text-[11px] font-medium">Mail</span>
+                            <Mail className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                            <span className="hidden 2xl:inline text-[11px] font-medium">Mail</span>
                           </button>
                         )}
 
@@ -1157,11 +1141,11 @@ export default function App() {
                               ? 'interview_reminder' 
                               : 'unanswered',
                           })}
-                          className="p-1.5 rounded-lg bg-emerald-500/10 hover:bg-emerald-500/25 text-emerald-300 border border-emerald-500/30 text-xs flex items-center gap-1 transition"
+                          className="p-1.5 rounded-lg bg-emerald-500/10 hover:bg-emerald-500/25 text-emerald-300 border border-emerald-500/30 text-xs flex items-center gap-1 transition cursor-pointer"
                           title="Send WhatsApp message (interview reminder or missed call follow-up)"
                         >
-                          <MessageSquare className="w-3.5 h-3.5 text-emerald-400" />
-                          <span className="hidden xl:inline text-[11px] font-medium">WhatsApp</span>
+                          <MessageSquare className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                          <span className="hidden 2xl:inline text-[11px] font-medium">WhatsApp</span>
                         </button>
 
                         {/* Schedule AI Call button */}
@@ -1169,15 +1153,15 @@ export default function App() {
                           type="button"
                           id={`btn-schedule-call-${cand.id}`}
                           onClick={() => setScheduleCallCandidate(cand)}
-                          className={`p-1.5 rounded-lg border text-xs flex items-center gap-1 transition ${
+                          className={`p-1.5 rounded-lg border text-xs flex items-center gap-1 transition cursor-pointer ${
                             cand.scheduledCall?.status === 'pending'
                               ? 'bg-amber-500/20 text-amber-300 border-amber-500/40'
                               : 'bg-slate-800 hover:bg-slate-700 text-amber-400/90 border-slate-700'
                           }`}
                           title="Schedule automated AI follow-up call with date and time picker"
                         >
-                          <Calendar className="w-3.5 h-3.5 text-amber-400" />
-                          <span className="hidden xl:inline text-[11px] font-medium">
+                          <Calendar className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                          <span className="hidden 2xl:inline text-[11px] font-medium">
                             {cand.scheduledCall?.status === 'pending' ? cand.scheduledCall.time : 'Schedule'}
                           </span>
                         </button>
@@ -1194,9 +1178,9 @@ export default function App() {
                               : 'screening';
                             handleStartCall(cand, scenario);
                           }}
-                          className="inline-flex items-center gap-1.5 text-xs font-semibold bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 px-2.5 py-1.5 rounded-lg transition shadow-md shadow-amber-500/20"
+                          className="inline-flex items-center gap-1.5 text-xs font-semibold bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 px-2.5 py-1.5 rounded-lg transition shadow-md shadow-amber-500/20 cursor-pointer shrink-0"
                         >
-                          <PhoneCall className="w-3 h-3" />
+                          <PhoneCall className="w-3 h-3 shrink-0" />
                           <span>
                             {cand.interviewSlotId ? 'Reconfirm' : 'Call'}
                           </span>
@@ -1237,7 +1221,7 @@ export default function App() {
         {/* TAB 4: VOICE LOGS & TRANSCRIPTS */}
         {activeTab === 'transcripts' && (
           <div className="space-y-4">
-            <div className="flex items-center justify-between text-xs text-slate-400 mb-2">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs text-slate-400 mb-2">
               <span className="font-semibold text-slate-300">
                 Audit Trail: All Completed HR Voice Conversations
               </span>
@@ -1245,8 +1229,8 @@ export default function App() {
             </div>
 
             {candidates.every((c) => c.callHistory.length === 0) ? (
-              <div className="p-12 text-center rounded-2xl bg-slate-900 border border-slate-800 text-slate-500 text-sm">
-                No voice calls recorded yet. Click "Start Voice Screening" to test the AI agent.
+              <div className="p-8 sm:p-12 text-center rounded-2xl bg-slate-900 border border-slate-800 text-slate-500 text-sm">
+                No voice calls recorded yet. Click &quot;Start Voice Screening&quot; to test the AI agent.
               </div>
             ) : (
               <div className="space-y-4">
@@ -1255,24 +1239,24 @@ export default function App() {
                   .map((call) => (
                     <div
                       key={call.id}
-                      className="p-5 rounded-2xl bg-[#0f172a] border border-slate-800 hover:border-slate-700 transition"
+                      className="p-4 sm:p-5 rounded-2xl bg-[#0f172a] border border-slate-800 hover:border-slate-700 transition"
                     >
                       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-3">
-                        <div className="flex items-center gap-2.5">
-                          <div className="w-8 h-8 rounded-lg bg-amber-500/20 text-amber-400 border border-amber-500/30 flex items-center justify-center font-bold text-xs">
+                        <div className="flex items-center gap-2.5 min-w-0">
+                          <div className="w-8 h-8 rounded-lg bg-amber-500/20 text-amber-400 border border-amber-500/30 flex items-center justify-center font-bold text-xs shrink-0">
                             HR
                           </div>
-                          <div>
-                            <h4 className="text-sm font-bold text-white">
+                          <div className="min-w-0">
+                            <h4 className="text-sm font-bold text-white break-words">
                               {call.candidateName} • <span className="text-amber-400 uppercase text-xs">{call.scenario} Call</span>
                             </h4>
-                            <p className="text-[11px] text-slate-400 font-mono">
+                            <p className="text-[11px] text-slate-400 font-mono break-words">
                               {call.timestamp} • Duration: {Math.floor(call.durationSeconds / 60)}m {call.durationSeconds % 60}s
                             </p>
                           </div>
                         </div>
 
-                        <span className="px-3 py-1 rounded-full text-xs font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 self-start sm:self-auto">
+                        <span className="px-3 py-1 rounded-full text-xs font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 self-start sm:self-auto shrink-0">
                           Outcome: {call.outcome}
                         </span>
                       </div>
@@ -1317,14 +1301,15 @@ export default function App() {
         )}
       </main>
 
-      {/* MODAL: LIVE VAPI VOICE ASSISTANT MODAL */}
-      {showVapiModal && (
-        <VapiCallModal
-          isOpen={showVapiModal}
-          candidate={vapiCandidate}
-          assistantId={DEFAULT_VAPI_ASSISTANT_ID}
-          onClose={() => setShowVapiModal(false)}
-          onCallEnded={(updatedCandidate) => {
+      {/* MODAL: PSTN OUTBOUND PHONE CALL MODAL (TWILIO + GEMINI VOICE AI) */}
+      {pstnCallCandidate && (
+        <PstnPhoneCallModal
+          isOpen={Boolean(pstnCallCandidate)}
+          candidate={pstnCallCandidate}
+          defaultScenario={pstnCallScenario}
+          onClose={() => setPstnCallCandidate(null)}
+          onCallCompleted={(updatedCandidate) => {
+            firestoreDataService.saveCandidate(updatedCandidate);
             setCandidates((prev) =>
               prev.map((c) => (c.id === updatedCandidate.id ? updatedCandidate : c))
             );
@@ -1332,9 +1317,9 @@ export default function App() {
               setSelectedCandidate(updatedCandidate);
             }
           }}
-          onSwitchToInteractive={(cand) => {
-            setShowVapiModal(false);
-            handleStartCall(cand, 'screening');
+          onSwitchToBrowserVoice={(cand, scenario) => {
+            setPstnCallCandidate(null);
+            handleStartCall(cand, scenario);
           }}
         />
       )}
@@ -1349,6 +1334,10 @@ export default function App() {
           onCallEnded={handleCallEnded}
           onOpenConfirmationMail={(cand) => setConfirmationMailCandidate(cand)}
           onOpenWhatsApp={(cand, template) => setWhatsAppCandidate({ candidate: cand, template })}
+          onSwitchToPstn={(cand, scenario) => {
+            setActiveCallCandidate(null);
+            handleStartPstnCall(cand, scenario);
+          }}
         />
       )}
 
@@ -1358,7 +1347,7 @@ export default function App() {
           candidate={selectedCandidate}
           onClose={() => setSelectedCandidate(null)}
           onStartCall={(cand, scenario) => handleStartCall(cand, scenario || 'screening')}
-          onStartVapiCall={(cand) => handleStartVapiCall(cand)}
+          onStartPstnCall={(cand) => handleStartPstnCall(cand, 'screening')}
           onOpenConfirmationMail={(cand) => setConfirmationMailCandidate(cand)}
           onOpenWhatsApp={(cand, template) => setWhatsAppCandidate({ candidate: cand, template })}
           onOpenScheduleCall={(cand) => setScheduleCallCandidate(cand)}

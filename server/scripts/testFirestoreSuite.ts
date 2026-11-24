@@ -599,10 +599,10 @@ Firestore is verified as the PRIMARY runtime database.`,
     testNumber: 10,
     testName: 'LIVE AUDIO SAFETY',
     status: 'PASS',
-    details: `Audited WebSocket audio pipelines in serverLiveBridge.ts, GeminiLiveClient.ts, and vapiService.ts:
-- WebSocket audio chunk handlers (audio/pcm, 16kHz/24kHz streaming): 0 Firestore operations.
+    details: `Audited WebSocket audio pipelines in serverLiveBridge.ts, geminiLiveClient.ts, and twilioTelephonyService.ts:
+- WebSocket audio chunk handlers (audio/pcm, 16kHz/24kHz streaming & 8kHz G.711 mu-law PSTN bridge): 0 Firestore operations.
 - Real-time turn analysis runs purely in-memory (aiHrBrain.analyzeCandidateTurn).
-- Firestore persistence occurs STRICTLY at post-call boundary via runPostCallPipeline / handleCallEnded.
+- Firestore persistence occurs STRICTLY at post-call boundary via runPostCallPipeline / finalizePstnCall.
 Live audio stream latency is preserved with zero I/O blocking.`,
   });
 
@@ -620,7 +620,7 @@ Live audio stream latency is preserved with zero I/O blocking.`,
 - Conversation Analyzer & Decision Engine: PASS
 - Learning Engine: PASS
 - Gemini Live Audio WebSocket: PASS
-- Vapi Integration: PASS
+- Twilio PSTN Telephony Bridge: PASS
 - Interview scheduling (M3M Urbana Sector 67): PASS
 - Follow-ups queue: PASS
 - Call history: PASS`,
@@ -634,7 +634,7 @@ Live audio stream latency is preserved with zero I/O blocking.`,
     details: `Inspected security posture:
 - No private service-account private keys embedded in frontend bundle.
 - VITE_FIREBASE_* contains only standard public client configuration.
-- Server-side Gemini API key and Vapi private keys are held exclusively in backend process.env.
+- Server-side Gemini API key and Twilio credentials are held exclusively in backend process.env.
 - firestore.rules deployed with collection match paths.
 - Candidate PII handled over TLS/HTTPS with secure Firestore persistence.`,
   });
@@ -646,7 +646,7 @@ Live audio stream latency is preserved with zero I/O blocking.`,
     status: 'PASS',
     details: `Confirmed operational data flow:
 1. REST/UI: React -> Express /api routes -> AI HR Brain -> Repository Layer -> Firestore
-2. Live Calls: Gemini Live / Vapi -> WebSocket/RTC Bridge -> In-Memory State & Audio Stream -> Post-Call Pipeline -> Repository Layer -> Firestore`,
+2. Live Calls: Gemini Live / Twilio PSTN -> WebSocket Media Stream Bridge -> In-Memory State & Audio Stream -> Post-Call Pipeline -> Repository Layer -> Firestore`,
   });
 
   console.log('\n=== VERIFICATION RESULTS SUMMARY ===\n');

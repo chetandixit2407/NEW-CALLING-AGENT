@@ -151,22 +151,22 @@ export const AiHrBrainModal: React.FC<AiHrBrainModalProps> = ({
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
-        <div className="p-5 bg-gradient-to-r from-[#0d1629] via-[#101b33] to-[#0d1629] border-b border-slate-800 flex items-center justify-between flex-wrap gap-4">
-          <div className="flex items-center gap-3">
-            <div className="p-2.5 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-400 shadow-sm">
+        <div className="p-4 sm:p-5 bg-gradient-to-r from-[#0d1629] via-[#101b33] to-[#0d1629] border-b border-slate-800 flex items-center justify-between flex-wrap gap-3 sm:gap-4">
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="p-2.5 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-400 shadow-sm shrink-0">
               <Brain className="w-6 h-6 animate-pulse" />
             </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <h2 className="text-lg font-bold text-white font-['Space_Grotesk'] tracking-tight">
+            <div className="min-w-0">
+              <div className="flex items-center flex-wrap gap-2">
+                <h2 className="text-base sm:text-lg font-bold text-white font-['Space_Grotesk'] tracking-tight break-words">
                   Single AI HR Brain — Continuous Learning & Memory Center
                 </h2>
-                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 flex items-center gap-1">
+                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 flex items-center gap-1 shrink-0">
                   <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping" />
                   Self-Learning Active
                 </span>
               </div>
-              <p className="text-xs text-slate-400 mt-0.5">
+              <p className="text-xs text-slate-400 mt-0.5 break-words">
                 White Collar Realty Autonomous Recruitment Core • 6 Persistent Memory Layers • Zero-Repetition Guarantee
               </p>
             </div>
@@ -266,11 +266,11 @@ export const AiHrBrainModal: React.FC<AiHrBrainModalProps> = ({
         </div>
 
         {/* Content Body */}
-        <div className="flex-1 overflow-y-auto p-6 space-y-6">
+        <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-6">
           {activeTab === 'overview' && (
             <div className="space-y-6">
               {/* Top Stats Cards */}
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-3.5">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
                 <div className="p-4 rounded-xl bg-slate-900/90 border border-slate-800 shadow-sm">
                   <div className="text-xs text-slate-400 flex items-center justify-between">
                     <span>Learned Facts</span>
@@ -325,10 +325,10 @@ export const AiHrBrainModal: React.FC<AiHrBrainModalProps> = ({
               </div>
 
               {/* 6 Memory Layers Architecture Card */}
-              <div className="p-5 rounded-2xl bg-[#0b1325] border border-slate-800">
-                <div className="flex items-center justify-between mb-4">
-                  <div className="flex items-center gap-2">
-                    <Layers className="w-5 h-5 text-amber-400" />
+              <div className="p-4 sm:p-5 rounded-2xl bg-[#0b1325] border border-slate-800">
+                <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <Layers className="w-5 h-5 text-amber-400 shrink-0" />
                     <h3 className="text-sm font-bold text-white uppercase tracking-wider">
                       6-Layer Persistent Memory Architecture (Rule 30 & 31)
                     </h3>
@@ -422,10 +422,10 @@ export const AiHrBrainModal: React.FC<AiHrBrainModalProps> = ({
                     key={prop.id}
                     className="p-4 rounded-xl bg-slate-900/80 border border-slate-800 hover:border-slate-700 transition"
                   >
-                    <div className="flex items-start justify-between gap-4">
-                      <div>
+                    <div className="flex flex-col sm:flex-row items-start justify-between gap-4">
+                      <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-2 flex-wrap">
-                          <span className="text-xs font-bold text-white">{prop.pattern}</span>
+                          <span className="text-xs font-bold text-white break-words">{prop.pattern}</span>
                           <span
                             className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider ${
                               prop.status === 'APPROVED'
@@ -546,10 +546,10 @@ export const AiHrBrainModal: React.FC<AiHrBrainModalProps> = ({
               </div>
 
               {/* Adaptive Communication Rules Matrix (Rule 32) */}
-              <div className="p-5 rounded-2xl bg-[#0b1325] border border-slate-800 space-y-3">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <Sparkles className="w-4 h-4 text-amber-400" />
+              <div className="p-4 sm:p-5 rounded-2xl bg-[#0b1325] border border-slate-800 space-y-3">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <Sparkles className="w-4 h-4 text-amber-400 shrink-0" />
                     <h4 className="text-xs font-bold uppercase tracking-wider text-white">
                       Adaptive Conversation Rules Matrix (Rule 32)
                     </h4>
@@ -670,13 +670,13 @@ export const AiHrBrainModal: React.FC<AiHrBrainModalProps> = ({
                   <span>Synthesizing Next Call Brief from 6 Memory Layers...</span>
                 </div>
               ) : nextBrief ? (
-                <div className="p-5 rounded-xl bg-slate-900/90 border border-slate-800 space-y-4 text-xs">
-                  <div className="flex items-center justify-between pb-3 border-b border-slate-800">
-                    <div>
-                      <div className="text-sm font-bold text-white">{nextBrief.candidateName}</div>
-                      <div className="text-[11px] text-amber-400">{nextBrief.appliedRole}</div>
+                <div className="p-4 sm:p-5 rounded-xl bg-slate-900/90 border border-slate-800 space-y-4 text-xs">
+                  <div className="flex flex-wrap items-center justify-between gap-2 pb-3 border-b border-slate-800">
+                    <div className="min-w-0">
+                      <div className="text-sm font-bold text-white break-words">{nextBrief.candidateName}</div>
+                      <div className="text-[11px] text-amber-400 break-words">{nextBrief.appliedRole}</div>
                     </div>
-                    <div className="text-right text-[11px] text-slate-400">
+                    <div className="text-left sm:text-right text-[11px] text-slate-400">
                       <div>Interview State: <span className="text-slate-200 font-semibold">{nextBrief.interviewState}</span></div>
                       <div>Preferred Language: <span className="text-slate-200 font-semibold">{nextBrief.communicationPreferences.language}</span></div>
                     </div>
@@ -685,7 +685,7 @@ export const AiHrBrainModal: React.FC<AiHrBrainModalProps> = ({
                   {/* Recommended Opening Statement */}
                   <div className="p-3.5 rounded-xl bg-amber-500/10 border border-amber-500/30">
                     <div className="font-bold text-amber-300 text-xs mb-1 flex items-center gap-1.5">
-                      <Sparkles className="w-4 h-4 text-amber-400" />
+                      <Sparkles className="w-4 h-4 text-amber-400 shrink-0" />
                       <span>Recommended Intelligent Opening Statement:</span>
                     </div>
                     <p className="text-slate-200 italic leading-relaxed">
@@ -696,13 +696,13 @@ export const AiHrBrainModal: React.FC<AiHrBrainModalProps> = ({
                   {/* Adaptive Conversation Directives & Observed Behavior */}
                   {(nextBrief.adaptiveConversationDirectives?.length > 0 || nextBrief.observedBehaviorSummary) && (
                     <div className="p-3.5 rounded-xl bg-purple-500/10 border border-purple-500/30">
-                      <div className="font-bold text-purple-300 text-xs mb-1.5 flex items-center justify-between">
+                      <div className="font-bold text-purple-300 text-xs mb-1.5 flex flex-wrap items-center justify-between gap-2">
                         <div className="flex items-center gap-1.5">
-                          <Sparkles className="w-4 h-4 text-purple-400" />
+                          <Sparkles className="w-4 h-4 text-purple-400 shrink-0" />
                           <span>Behavior-Adaptive Conversation Directives:</span>
                         </div>
                         {nextBrief.behaviorTrend && (
-                          <span className="text-[10px] px-2 py-0.5 rounded bg-purple-500/20 text-purple-200 border border-purple-500/30">
+                          <span className="text-[10px] px-2 py-0.5 rounded bg-purple-500/20 text-purple-200 border border-purple-500/30 shrink-0">
                             Trend: {nextBrief.behaviorTrend}
                           </span>
                         )}
@@ -787,23 +787,23 @@ export const AiHrBrainModal: React.FC<AiHrBrainModalProps> = ({
 
               <div className="space-y-2">
                 {auditTrail.slice(0, 15).map((a) => (
-                  <div key={a.id} className="p-3 rounded-lg bg-slate-900/70 border border-slate-800 text-xs flex items-center justify-between">
-                    <div>
-                      <div className="flex items-center gap-2">
+                  <div key={a.id} className="p-3 rounded-lg bg-slate-900/70 border border-slate-800 text-xs flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center flex-wrap gap-2">
                         <span className="font-bold text-slate-200">{a.candidateName}</span>
                         <span className="text-slate-500">•</span>
-                        <span className="text-amber-400 font-semibold">{a.field}</span>
-                        <span className="px-1.5 py-0.5 rounded text-[10px] bg-slate-800 text-slate-300">
+                        <span className="text-amber-400 font-semibold break-words">{a.field}</span>
+                        <span className="px-1.5 py-0.5 rounded text-[10px] bg-slate-800 text-slate-300 shrink-0">
                           {a.source}
                         </span>
                       </div>
-                      <div className="text-[11px] text-slate-400 mt-1">
+                      <div className="text-[11px] text-slate-400 mt-1 break-words">
                         <span className="text-slate-500">Value: </span>
                         <span className="text-emerald-300 font-medium">{JSON.stringify(a.newValue)}</span>
                         {a.reason && <span className="text-slate-400 ml-2">({a.reason})</span>}
                       </div>
                     </div>
-                    <div className="text-right text-[10px] text-slate-500">
+                    <div className="text-left sm:text-right text-[10px] text-slate-500 shrink-0">
                       <div>Confidence: {(a.confidence * 100).toFixed(0)}%</div>
                       <div>{new Date(a.timestamp).toLocaleTimeString()}</div>
                     </div>
@@ -829,10 +829,10 @@ export const AiHrBrainModal: React.FC<AiHrBrainModalProps> = ({
                   </h4>
                   {questionStats.map((q) => (
                     <div key={q.questionId} className="p-3 rounded-lg bg-slate-900/70 border border-slate-800">
-                      <div className="font-semibold text-slate-200">{q.questionText}</div>
-                      <div className="flex items-center justify-between text-[11px] text-slate-400 mt-2">
+                      <div className="font-semibold text-slate-200 break-words">{q.questionText}</div>
+                      <div className="flex flex-wrap items-center justify-between gap-2 text-[11px] text-slate-400 mt-2">
                         <span>Target: {q.roleTarget}</span>
-                        <span className="text-emerald-400 font-bold">
+                        <span className="text-emerald-400 font-bold shrink-0">
                           {(q.successfulAnswerRate * 100).toFixed(0)}% Success Rate
                         </span>
                       </div>
@@ -846,10 +846,10 @@ export const AiHrBrainModal: React.FC<AiHrBrainModalProps> = ({
                   </h4>
                   {scenarioStats.map((sc) => (
                     <div key={sc.scenarioId} className="p-3 rounded-lg bg-slate-900/70 border border-slate-800">
-                      <div className="font-semibold text-slate-200">{sc.scenarioTitle}</div>
-                      <div className="flex items-center justify-between text-[11px] text-slate-400 mt-2">
+                      <div className="font-semibold text-slate-200 break-words">{sc.scenarioTitle}</div>
+                      <div className="flex flex-wrap items-center justify-between gap-2 text-[11px] text-slate-400 mt-2">
                         <span>Tier: {sc.seniorityTier}</span>
-                        <span className="text-blue-400 font-bold">
+                        <span className="text-blue-400 font-bold shrink-0">
                           {(sc.differentiatesStrongCandidatesRate * 100).toFixed(0)}% Differentiation
                         </span>
                       </div>

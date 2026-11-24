@@ -185,3 +185,71 @@ export class DryRunCallProvider implements CallProvider {
 }
 
 export const dryRunCallProvider = new DryRunCallProvider();
+
+import { twilioTelephonyService } from '../../telephony/twilioTelephonyService';
+
+export class TwilioLiveCallProvider implements CallProvider {
+  public name = 'TwilioLiveCallProvider';
+  public mode: AutomationMode = 'LIVE';
+
+  public async startCall(candidate: Candidate, queueJobId: string): Promise<{ callId: string; status: string }> {
+    const activeCall = await twilioTelephonyService.initiateOutboundCall({
+      candidate,
+      scenario: 'screening',
+      lockId: queueJobId,
+    });
+    return {
+      callId: activeCall.callId,
+      status: activeCall.status,
+    };
+  }
+
+  public async executeCall(
+    candidate: Candidate,
+    queueJobId: string
+  ): Promise<CallSimulationResult> {
+    const activeCall = await twilioTelephonyService.initiateOutboundCall({
+      candidate,
+      scenario: 'screening',
+      lockId: queueJobId,
+    });
+
+    // Poll until PSTN call reaches a terminal state (max 10 minutes)
+    const maxWaitMs = 10 * 60 * 1000;
+    const start = Date.now();
+    while (Date.now() - start < maxWaitMs) {
+      const latest = twilioTelephonyService.getCall(activeCall.callId);
+      if (!latest) break;
+      if (['completed', 'busy', 'no-answer', 'failed', 'canceled'].includes(latest.status) && latest.finalized) {
+        break;
+      }
+      await new Promise((resolve) => setTimeout(resolve, 2000));
+    }
+
+    const finished = twilioTelephonyService.getCall(activeCall.callId) || activeCall;
+    let mappedOutcome: CallSimulationResult['outcome'] = 'COMPLETED';
+    if (finished.status === 'no-answer') mappedOutcome = 'NO_ANSWER';
+    else if (finished.status === 'busy') mappedOutcome = 'BUSY';
+    else if (finished.status === 'failed' || finished.status === 'canceled') mappedOutcome = 'FAILED';
+    else if (finished.outcome === 'CALL_BACK_REQUESTED') mappedOutcome = 'CALLBACK_REQUESTED';
+
+    return {
+      callId: finished.callId,
+      durationSeconds: finished.durationSeconds || 0,
+      outcome: mappedOutcome,
+      transcript: finished.transcript.map((m) => ({
+        id: m.id,
+        sender: m.sender === 'candidate' ? 'candidate' : 'agent',
+        text: m.text,
+        timestamp: m.timestamp,
+      })),
+      extractedFields: finished.extractedFields || {},
+      summary: finished.summary || `Twilio + Gemini Voice AI PSTN call (${finished.status}).`,
+      qualificationStatus: finished.outcome || finished.status,
+      callbackTime: finished.callbackTime,
+    };
+  }
+}
+
+export const twilioLiveCallProvider = new TwilioLiveCallProvider();
+

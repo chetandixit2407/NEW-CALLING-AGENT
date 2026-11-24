@@ -94,39 +94,39 @@ White Collar Realty
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-xs animate-in fade-in duration-200">
+    <div className="fixed inset-0 z-50 overflow-y-auto flex items-center justify-center p-3 sm:p-4 bg-black/75 backdrop-blur-xs animate-in fade-in duration-200">
       <div 
         className="w-full max-w-2xl bg-[#0d1526] border border-slate-700/80 rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
-        <div className="p-5 bg-gradient-to-r from-slate-900 to-[#121c33] border-b border-slate-800 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-amber-500/15 border border-amber-500/30 flex items-center justify-center text-amber-400">
+        <div className="p-4 sm:p-5 bg-gradient-to-r from-slate-900 to-[#121c33] border-b border-slate-800 flex items-center justify-between gap-3 shrink-0">
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="w-10 h-10 rounded-xl bg-amber-500/15 border border-amber-500/30 flex items-center justify-center text-amber-400 shrink-0">
               <Mail className="w-5 h-5" />
             </div>
-            <div>
-              <h3 className="text-base font-bold text-white flex items-center gap-2 font-['Space_Grotesk']">
-                Send Interview Confirmation Mail
-                <span className="text-[11px] font-normal px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+            <div className="min-w-0">
+              <h3 className="text-base font-bold text-white flex flex-wrap items-center gap-2 font-['Space_Grotesk']">
+                <span>Send Interview Confirmation Mail</span>
+                <span className="text-[11px] font-normal px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 shrink-0">
                   Ready to Dispatch
                 </span>
               </h3>
-              <p className="text-xs text-slate-400">
+              <p className="text-xs text-slate-400 break-words">
                 Official interview call letter with Sector 67 venue details and guidelines
               </p>
             </div>
           </div>
           <button
             onClick={onClose}
-            className="p-1.5 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800 transition"
+            className="p-1.5 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800 transition shrink-0"
           >
             <X className="w-5 h-5" />
           </button>
         </div>
 
         {/* Content */}
-        <div className="p-5 overflow-y-auto space-y-4 text-xs text-slate-300">
+        <div className="p-4 sm:p-5 overflow-y-auto space-y-4 text-xs text-slate-300">
           {sentSuccess && (
             <div className="p-3.5 rounded-xl bg-emerald-500/15 border border-emerald-500/40 text-emerald-300 flex items-center gap-2.5 animate-in fade-in">
               <Check className="w-5 h-5 text-emerald-400 shrink-0" />
@@ -197,15 +197,15 @@ White Collar Realty
 
           {/* Email Preview */}
           <div>
-            <div className="flex items-center justify-between mb-1.5">
+            <div className="flex flex-wrap items-center justify-between gap-2 mb-1.5">
               <label className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
-                <FileText className="w-3.5 h-3.5 text-slate-400" />
+                <FileText className="w-3.5 h-3.5 text-slate-400 shrink-0" />
                 Letter Preview
               </label>
               <button
                 type="button"
                 onClick={handleCopy}
-                className="text-[11px] text-amber-400 hover:text-amber-300 flex items-center gap-1 font-semibold"
+                className="text-[11px] text-amber-400 hover:text-amber-300 flex items-center gap-1 font-semibold shrink-0"
               >
                 {copied ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
                 <span>{copied ? 'Copied to Clipboard!' : 'Copy Letter Text'}</span>

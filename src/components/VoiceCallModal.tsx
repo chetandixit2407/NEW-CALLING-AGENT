@@ -293,8 +293,33 @@ export const VoiceCallModal: React.FC<VoiceCallModalProps> = ({
 
     liveClientRef.current = client;
 
-    // Start Live voice session
-    client.start(candidate, scenario, availableSlots, languageMode);
+    // Preflight server readiness check before opening mic/WebSocket
+    (async () => {
+      try {
+        const statusRes = await fetch('/api/live-status');
+        if (statusRes.ok) {
+          const statusData = await statusRes.json();
+          if (!isMounted || isCallEndedRef.current) return;
+          if (!statusData.hasKey) {
+            if (stopRingRef.current) {
+              stopRingRef.current();
+              stopRingRef.current = null;
+            }
+            fetch(`/api/candidate/${candidate.id}/unlock`, { method: 'POST' }).catch(() => {});
+            setErrorMessage(
+              'Gemini Live API key is not configured on the server. Please add GEMINI_API_KEY in Settings > Secrets.'
+            );
+            setCallStatus('error');
+            return;
+          }
+        }
+      } catch {
+        // Proceed to client.start if preflight network check is unavailable
+      }
+
+      if (!isMounted || isCallEndedRef.current) return;
+      client.start(candidate, scenario, availableSlots, languageMode);
+    })();
 
     return () => {
       isMounted = false;
@@ -679,33 +704,33 @@ export const VoiceCallModal: React.FC<VoiceCallModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 overflow-hidden bg-black/80 backdrop-blur-md flex items-center justify-center p-2 sm:p-4 animate-in fade-in duration-200">
+    <div className="fixed inset-0 z-50 overflow-y-auto bg-black/80 backdrop-blur-md flex items-center justify-center p-2 sm:p-4 animate-in fade-in duration-200">
       <div 
-        className="w-full max-w-4xl bg-[#0b1322] border border-slate-700/80 rounded-2xl shadow-2xl overflow-hidden flex flex-col h-[92vh] max-h-[850px]"
+        className="w-full max-w-4xl bg-[#0b1322] border border-slate-700/80 rounded-2xl shadow-2xl overflow-y-auto lg:overflow-hidden flex flex-col max-h-[92vh] lg:h-[92vh] lg:max-h-[850px]"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Call Header */}
-        <div className="bg-[#0e172a] border-b border-slate-800 px-5 py-4 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="relative">
-              <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-amber-500 to-amber-700 flex items-center justify-center font-bold text-white text-lg shadow-lg shadow-amber-500/20 border border-amber-400/40">
+        <div className="bg-[#0e172a] border-b border-slate-800 px-4 sm:px-5 py-3.5 sm:py-4 flex flex-wrap items-center justify-between gap-3 shrink-0">
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="relative shrink-0">
+              <div className="w-11 h-11 sm:w-12 sm:h-12 rounded-xl bg-gradient-to-br from-amber-500 to-amber-700 flex items-center justify-center font-bold text-white text-base sm:text-lg shadow-lg shadow-amber-500/20 border border-amber-400/40">
                 {candidate.name.substring(0, 2).toUpperCase()}
               </div>
               {callStatus === 'connected' && (
                 <span className="absolute -bottom-1 -right-1 w-3.5 h-3.5 rounded-full bg-emerald-500 border-2 border-[#0e172a]" />
               )}
             </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <h3 className="text-base font-bold text-white font-['Space_Grotesk']">
+            <div className="min-w-0">
+              <div className="flex items-center flex-wrap gap-2">
+                <h3 className="text-base font-bold text-white font-['Space_Grotesk'] break-words">
                   {candidate.name}
                 </h3>
-                <span className="text-[11px] font-semibold px-2 py-0.5 rounded bg-amber-500/10 text-amber-400 border border-amber-500/20">
+                <span className="text-[11px] font-semibold px-2 py-0.5 rounded bg-amber-500/10 text-amber-400 border border-amber-500/20 shrink-0">
                   {scenario === 'screening' ? 'Screening Call' : scenario === 'reminder' ? 'Reconfirmation Call' : scenario === 'missed_followup' ? 'Missed Follow-up' : 'Callback Follow-up'}
                 </span>
               </div>
-              <p className="text-xs text-slate-400 flex items-center gap-2 mt-0.5">
-                <span>{candidate.appliedRole}</span>
+              <p className="text-xs text-slate-400 flex items-center flex-wrap gap-x-2 gap-y-0.5 mt-0.5">
+                <span className="break-words">{candidate.appliedRole}</span>
                 <span>•</span>
                 <span className="font-mono text-slate-300">{candidate.phone}</span>
               </p>
@@ -713,19 +738,19 @@ export const VoiceCallModal: React.FC<VoiceCallModalProps> = ({
           </div>
 
           {/* Call Status & Timer Badge */}
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2 sm:gap-3 ml-auto shrink-0">
             {callStatus === 'ringing' ? (
-              <div className="flex items-center gap-2 bg-amber-500/10 border border-amber-500/30 text-amber-400 px-3.5 py-1.5 rounded-lg text-xs font-semibold animate-pulse">
+              <div className="flex items-center gap-2 bg-amber-500/10 border border-amber-500/30 text-amber-400 px-3 py-1.5 rounded-lg text-xs font-semibold animate-pulse">
                 <span className="w-2 h-2 rounded-full bg-amber-400" />
                 <span>Ringing Candidate...</span>
               </div>
             ) : callStatus === 'connected' ? (
-              <div className="flex items-center gap-2 bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 px-3.5 py-1.5 rounded-lg text-xs font-semibold">
+              <div className="flex items-center gap-2 bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 px-3 py-1.5 rounded-lg text-xs font-semibold">
                 <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
                 <span className="font-mono">{formatTime(callDuration)}</span>
               </div>
             ) : (
-              <div className="flex items-center gap-2 bg-rose-500/10 border border-rose-500/30 text-rose-400 px-3.5 py-1.5 rounded-lg text-xs font-semibold">
+              <div className="flex items-center gap-2 bg-rose-500/10 border border-rose-500/30 text-rose-400 px-3 py-1.5 rounded-lg text-xs font-semibold">
                 <span>Call Ended</span>
               </div>
             )}
@@ -829,14 +854,14 @@ export const VoiceCallModal: React.FC<VoiceCallModalProps> = ({
 
         {/* Error Banner if any */}
         {errorMessage && (
-          <div className="bg-rose-950/80 border-b border-rose-800 px-5 py-2 text-xs text-rose-200 flex items-center justify-between">
-            <div className="flex items-center gap-2">
+          <div className="bg-rose-950/80 border-b border-rose-800 px-4 sm:px-5 py-2 text-xs text-rose-200 flex flex-wrap items-center justify-between gap-2 shrink-0">
+            <div className="flex items-center gap-2 min-w-0">
               <AlertCircle className="w-4 h-4 text-rose-400 shrink-0" />
-              <span>{errorMessage}</span>
+              <span className="break-words">{errorMessage}</span>
             </div>
             <button
               onClick={() => setErrorMessage(null)}
-              className="text-rose-400 hover:text-white text-xs underline"
+              className="text-rose-400 hover:text-white text-xs underline shrink-0"
             >
               Dismiss
             </button>
@@ -844,11 +869,11 @@ export const VoiceCallModal: React.FC<VoiceCallModalProps> = ({
         )}
 
         {/* Main Grid: Left Transcript & Visualizer | Right Live Screening Data */}
-        <div className="flex-1 min-h-0 grid grid-cols-1 lg:grid-cols-12 overflow-hidden">
+        <div className="flex-1 min-h-0 grid grid-cols-1 lg:grid-cols-12 lg:overflow-hidden">
           {/* Left 7 cols: Real-Time Audio Chat Transcript & Controls */}
-          <div className="lg:col-span-7 flex flex-col min-h-0 border-r border-slate-800 bg-[#080e1a]">
+          <div className="lg:col-span-7 flex flex-col min-h-[320px] lg:min-h-0 border-b lg:border-b-0 lg:border-r border-slate-800 bg-[#080e1a]">
             {/* Transcript Messages Area */}
-            <div className="flex-1 overflow-y-auto p-4 space-y-3.5">
+            <div className="flex-1 overflow-y-auto p-3.5 sm:p-4 space-y-3.5 max-h-[340px] lg:max-h-none">
               {transcript.length === 0 && callStatus === 'ringing' && (
                 <div className="h-full flex flex-col items-center justify-center text-center p-6 space-y-3">
                   <div className="w-16 h-16 rounded-full bg-amber-500/10 border border-amber-500/30 flex items-center justify-center animate-bounce">
@@ -979,13 +1004,13 @@ export const VoiceCallModal: React.FC<VoiceCallModalProps> = ({
           </div>
 
           {/* Right 5 cols: Live Screening Dashboard & Real-Time Tool Actions */}
-          <div className="lg:col-span-5 flex flex-col min-h-0 bg-[#0c1424] p-4 overflow-y-auto space-y-4">
+          <div className="lg:col-span-5 flex flex-col min-h-0 bg-[#0c1424] p-3.5 sm:p-4 lg:overflow-y-auto space-y-4">
             {/* Tabs */}
-            <div className="flex items-center gap-1 p-1 rounded-xl bg-slate-900 border border-slate-800 text-xs">
+            <div className="flex flex-wrap items-center gap-1 p-1 rounded-xl bg-slate-900 border border-slate-800 text-xs">
               <button
                 type="button"
                 onClick={() => setRightPanelTab('checklist')}
-                className={`flex-1 py-1.5 rounded-lg font-semibold transition cursor-pointer text-center ${
+                className={`flex-1 min-w-fit px-2 py-1.5 rounded-lg font-semibold transition cursor-pointer text-center whitespace-nowrap ${
                   rightPanelTab === 'checklist'
                     ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
                     : 'text-slate-400 hover:text-slate-200'
@@ -996,7 +1021,7 @@ export const VoiceCallModal: React.FC<VoiceCallModalProps> = ({
               <button
                 type="button"
                 onClick={() => setRightPanelTab('questions')}
-                className={`flex-1 py-1.5 rounded-lg font-semibold transition cursor-pointer text-center relative ${
+                className={`flex-1 min-w-fit px-2 py-1.5 rounded-lg font-semibold transition cursor-pointer text-center relative whitespace-nowrap ${
                   rightPanelTab === 'questions'
                     ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
                     : 'text-slate-400 hover:text-slate-200'
@@ -1010,7 +1035,7 @@ export const VoiceCallModal: React.FC<VoiceCallModalProps> = ({
               <button
                 type="button"
                 onClick={() => setRightPanelTab('memory')}
-                className={`flex-1 py-1.5 rounded-lg font-semibold transition cursor-pointer text-center ${
+                className={`flex-1 min-w-fit px-2 py-1.5 rounded-lg font-semibold transition cursor-pointer text-center whitespace-nowrap ${
                   rightPanelTab === 'memory'
                     ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
                     : 'text-slate-400 hover:text-slate-200'
@@ -1021,7 +1046,7 @@ export const VoiceCallModal: React.FC<VoiceCallModalProps> = ({
               <button
                 type="button"
                 onClick={() => setRightPanelTab('behavior')}
-                className={`flex-1 py-1.5 rounded-lg font-semibold transition cursor-pointer text-center relative ${
+                className={`flex-1 min-w-fit px-2 py-1.5 rounded-lg font-semibold transition cursor-pointer text-center relative whitespace-nowrap ${
                   rightPanelTab === 'behavior'
                     ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
                     : 'text-slate-400 hover:text-slate-200'
@@ -1035,7 +1060,7 @@ export const VoiceCallModal: React.FC<VoiceCallModalProps> = ({
               <button
                 type="button"
                 onClick={() => setRightPanelTab('action')}
-                className={`flex-1 py-1.5 rounded-lg font-semibold transition cursor-pointer text-center ${
+                className={`flex-1 min-w-fit px-2 py-1.5 rounded-lg font-semibold transition cursor-pointer text-center whitespace-nowrap ${
                   rightPanelTab === 'action'
                     ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
                     : 'text-slate-400 hover:text-slate-200'
@@ -1054,12 +1079,12 @@ export const VoiceCallModal: React.FC<VoiceCallModalProps> = ({
                     ? 'bg-amber-950/40 border-amber-500/40 text-amber-200'
                     : 'bg-emerald-950/30 border-emerald-500/30 text-emerald-200'
                 }`}>
-                  <div className="flex items-center justify-between pb-1.5 mb-1.5 border-b border-slate-800">
+                  <div className="flex flex-wrap items-center justify-between gap-2 pb-1.5 mb-1.5 border-b border-slate-800">
                     <span className="font-bold flex items-center gap-1.5 text-[11px]">
-                      <Lock className="w-3.5 h-3.5" />
+                      <Lock className="w-3.5 h-3.5 shrink-0" />
                       <span>Active Question Lock</span>
                     </span>
-                    <span className={`text-[10px] font-mono px-2 py-0.5 rounded font-bold ${
+                    <span className={`text-[10px] font-mono px-2 py-0.5 rounded font-bold shrink-0 ${
                       questionEngineState.activeQuestion
                         ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
                         : 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
@@ -1069,20 +1094,20 @@ export const VoiceCallModal: React.FC<VoiceCallModalProps> = ({
                   </div>
                   {questionEngineState.activeQuestion ? (
                     <div className="space-y-1">
-                      <div className="text-[10px] text-amber-300/80 font-mono">
+                      <div className="text-[10px] text-amber-300/80 font-mono break-words">
                         TOPIC: {questionEngineState.activeQuestion.topic.toUpperCase()} • ID: {questionEngineState.activeQuestion.id}
                       </div>
                       <p className="font-semibold text-white text-[11px] leading-snug">
                         "{questionEngineState.activeQuestion.questionText}"
                       </p>
                       <div className="text-[10px] text-amber-400 mt-1 flex items-center gap-1">
-                        <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" />
+                        <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse shrink-0" />
                         <span>Waiting for candidate response before any new question can be generated.</span>
                       </div>
                     </div>
                   ) : (
                     <div className="text-[11px] text-emerald-300 font-medium flex items-center gap-1.5">
-                      <CheckCircle className="w-3.5 h-3.5" />
+                      <CheckCircle className="w-3.5 h-3.5 shrink-0" />
                       <span>No active question lock. Next question may be evaluated via 7-check gate.</span>
                     </div>
                   )}
@@ -1090,16 +1115,16 @@ export const VoiceCallModal: React.FC<VoiceCallModalProps> = ({
 
                 {/* 7-Gate Anti-Duplicate Verification */}
                 <div className="bg-slate-900/80 p-3 rounded-xl border border-slate-800 space-y-2">
-                  <div className="flex items-center justify-between border-b border-slate-800 pb-1.5">
+                  <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-800 pb-1.5">
                     <span className="font-bold text-slate-300 text-[11px] flex items-center gap-1.5">
-                      <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
+                      <ShieldCheck className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
                       <span>7-Check Question Generation Gate</span>
                     </span>
-                    <span className="text-[10px] font-mono text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">
+                    <span className="text-[10px] font-mono text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20 shrink-0">
                       Zero-Duplicate Enforced
                     </span>
                   </div>
-                  <div className="grid grid-cols-2 gap-1.5 text-[10px]">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5 text-[10px]">
                     <div className="p-1.5 rounded bg-slate-950/80 border border-slate-800 flex items-center gap-1 text-emerald-400">
                       <CheckCircle className="w-3 h-3" />
                       <span>1. Single Question Lock</span>
@@ -1223,11 +1248,11 @@ export const VoiceCallModal: React.FC<VoiceCallModalProps> = ({
             {/* TAB 1: Real-Time Checklist */}
             {rightPanelTab === 'checklist' && (
               <div className="space-y-3 text-xs">
-                <div className="flex items-center justify-between pb-2 border-b border-slate-800">
+                <div className="flex flex-wrap items-center justify-between gap-2 pb-2 border-b border-slate-800">
                   <span className="font-bold text-slate-300 uppercase tracking-wider text-[11px]">
                     Extracted Criteria
                   </span>
-                  <span className="text-[10px] text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/20 font-mono">
+                  <span className="text-[10px] text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/20 font-mono shrink-0">
                     Live Tool Updates
                   </span>
                 </div>
@@ -1235,34 +1260,34 @@ export const VoiceCallModal: React.FC<VoiceCallModalProps> = ({
                 <div className="space-y-2">
 
                   {/* Current Company */}
-                  <div className="flex items-center justify-between p-2.5 rounded-xl bg-slate-900/80 border border-slate-800">
-                    <span className="text-slate-400">Current Employer:</span>
-                    <span className="font-semibold text-white">
+                  <div className="flex flex-wrap items-center justify-between gap-2 p-2.5 rounded-xl bg-slate-900/80 border border-slate-800">
+                    <span className="text-slate-400 shrink-0">Current Employer:</span>
+                    <span className="font-semibold text-white text-right break-words min-w-0">
                       {extracted.currentCompany || 'Pending response'}
                     </span>
                   </div>
 
                   {/* Designation */}
-                  <div className="flex items-center justify-between p-2.5 rounded-xl bg-slate-900/80 border border-slate-800">
-                    <span className="text-slate-400">Designation:</span>
-                    <span className="font-semibold text-white">
+                  <div className="flex flex-wrap items-center justify-between gap-2 p-2.5 rounded-xl bg-slate-900/80 border border-slate-800">
+                    <span className="text-slate-400 shrink-0">Designation:</span>
+                    <span className="font-semibold text-white text-right break-words min-w-0">
                       {extracted.currentDesignation || 'Pending response'}
                     </span>
                   </div>
 
                   {/* Real Estate Exp */}
-                  <div className="flex items-center justify-between p-2.5 rounded-xl bg-slate-900/80 border border-slate-800">
-                    <span className="text-slate-400">Real Estate Sales Exp:</span>
-                    <span className="font-semibold text-emerald-400">
+                  <div className="flex flex-wrap items-center justify-between gap-2 p-2.5 rounded-xl bg-slate-900/80 border border-slate-800">
+                    <span className="text-slate-400 shrink-0">Real Estate Sales Exp:</span>
+                    <span className="font-semibold text-emerald-400 text-right">
                       {extracted.realEstateExperienceYears !== undefined ? `${extracted.realEstateExperienceYears} Years` : 'Pending'}
                     </span>
                   </div>
 
                   {/* Gurgaon / Dubai Exp */}
                   <div className="p-2.5 rounded-xl bg-slate-900/80 border border-slate-800 space-y-1.5">
-                    <div className="flex items-center justify-between">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
                       <span className="text-slate-400">Target Markets:</span>
-                      <div className="flex gap-1.5">
+                      <div className="flex flex-wrap gap-1.5">
                         <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${extracted.gurgaonDubaiExperience?.gurgaon ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30' : 'bg-slate-800 text-slate-400'}`}>
                           Gurgaon: {extracted.gurgaonDubaiExperience?.gurgaon ? '✓ Yes' : 'Pending'}
                         </span>
@@ -1274,25 +1299,25 @@ export const VoiceCallModal: React.FC<VoiceCallModalProps> = ({
                   </div>
 
                   {/* Salary Fixed & Expected */}
-                  <div className="flex items-center justify-between p-2.5 rounded-xl bg-slate-900/80 border border-slate-800">
-                    <span className="text-slate-400">Fixed / Expected CTC:</span>
-                    <span className="font-semibold text-amber-300">
+                  <div className="flex flex-wrap items-center justify-between gap-2 p-2.5 rounded-xl bg-slate-900/80 border border-slate-800">
+                    <span className="text-slate-400 shrink-0">Fixed / Expected CTC:</span>
+                    <span className="font-semibold text-amber-300 text-right break-words min-w-0">
                       {extracted.currentSalaryLPA ? `${extracted.currentSalaryLPA} / ${extracted.expectedSalaryLPA || 'TBD'}` : 'Pending disclosure'}
                     </span>
                   </div>
 
                   {/* Notice Period */}
-                  <div className="flex items-center justify-between p-2.5 rounded-xl bg-slate-900/80 border border-slate-800">
-                    <span className="text-slate-400">Notice Period:</span>
-                    <span className="font-semibold text-white">
+                  <div className="flex flex-wrap items-center justify-between gap-2 p-2.5 rounded-xl bg-slate-900/80 border border-slate-800">
+                    <span className="text-slate-400 shrink-0">Notice Period:</span>
+                    <span className="font-semibold text-white text-right">
                       {extracted.noticePeriodDays !== undefined ? `${extracted.noticePeriodDays} Days` : 'Pending'}
                     </span>
                   </div>
 
                   {/* Location */}
-                  <div className="flex items-center justify-between p-2.5 rounded-xl bg-slate-900/80 border border-slate-800">
-                    <span className="text-slate-400">Current Location:</span>
-                    <span className="font-semibold text-white">
+                  <div className="flex flex-wrap items-center justify-between gap-2 p-2.5 rounded-xl bg-slate-900/80 border border-slate-800">
+                    <span className="text-slate-400 shrink-0">Current Location:</span>
+                    <span className="font-semibold text-white text-right break-words min-w-0">
                       {extracted.currentLocation || candidate.location}
                     </span>
                   </div>
@@ -1300,13 +1325,13 @@ export const VoiceCallModal: React.FC<VoiceCallModalProps> = ({
 
                 {/* Available Face-to-Face Slots */}
                 <div className="mt-3 pt-3 border-t border-slate-800">
-                  <div className="flex items-center justify-between mb-2">
+                  <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
                     <span className="text-slate-300 font-bold text-[11px] flex items-center gap-1.5">
-                      <Calendar className="w-3.5 h-3.5 text-amber-400" />
+                      <Calendar className="w-3.5 h-3.5 text-amber-400 shrink-0" />
                       <span>Gurgaon HQ Slots (Sector 67)</span>
                     </span>
                     {bookedSlotId && (
-                      <span className="text-[10px] font-bold text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/30">
+                      <span className="text-[10px] font-bold text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/30 shrink-0">
                         Slot Booked
                       </span>
                     )}
@@ -1325,17 +1350,17 @@ export const VoiceCallModal: React.FC<VoiceCallModalProps> = ({
                             liveClientRef.current.sendText(`Candidate selected slot: ${slot.displayLabel}`);
                           }
                         }}
-                        className={`w-full text-left p-2 rounded-xl text-xs flex items-center justify-between transition border cursor-pointer ${
+                        className={`w-full text-left p-2 rounded-xl text-xs flex items-center justify-between gap-2 transition border cursor-pointer ${
                           bookedSlotId === slot.id
                             ? 'bg-emerald-950/60 border-emerald-500/50 text-emerald-200'
-                            : 'bg-slate-900 hover:bg-slate-850 border-slate-800 text-slate-300'
+                            : 'bg-slate-900 hover:bg-slate-800/70 border-slate-800 text-slate-300'
                         }`}
                       >
-                        <div>
-                          <div className="font-semibold text-white">{slot.displayLabel}</div>
+                        <div className="min-w-0">
+                          <div className="font-semibold text-white truncate">{slot.displayLabel}</div>
                           <div className="text-[10px] text-slate-400">{slot.time} • Room 6B</div>
                         </div>
-                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded ${bookedSlotId === slot.id ? 'bg-emerald-500 text-slate-950' : 'bg-slate-800 text-slate-400'}`}>
+                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded shrink-0 ${bookedSlotId === slot.id ? 'bg-emerald-500 text-slate-950' : 'bg-slate-800 text-slate-400'}`}>
                           {bookedSlotId === slot.id ? 'Selected' : 'Select'}
                         </span>
                       </button>
@@ -1352,35 +1377,35 @@ export const VoiceCallModal: React.FC<VoiceCallModalProps> = ({
                   <div className="font-bold text-amber-400 text-xs border-b border-slate-800 pb-1">
                     Active Recruiter Memory State
                   </div>
-                  <div className="grid grid-cols-2 gap-2 text-[10px]">
-                    <div className="p-2 rounded bg-slate-950 border border-slate-800">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[10px]">
+                    <div className="p-2 rounded bg-slate-950 border border-slate-800 min-w-0">
                       <span className="text-slate-400 block">Candidate</span>
-                      <span className="font-bold text-white">{conversationMemory.candidate_name}</span>
+                      <span className="font-bold text-white break-words">{conversationMemory.candidate_name}</span>
                     </div>
-                    <div className="p-2 rounded bg-slate-950 border border-slate-800">
+                    <div className="p-2 rounded bg-slate-950 border border-slate-800 min-w-0">
                       <span className="text-slate-400 block">Target Role</span>
-                      <span className="font-bold text-white">{conversationMemory.target_role}</span>
+                      <span className="font-bold text-white break-words">{conversationMemory.target_role}</span>
                     </div>
-                    <div className="p-2 rounded bg-slate-950 border border-slate-800">
+                    <div className="p-2 rounded bg-slate-950 border border-slate-800 min-w-0">
                       <span className="text-slate-400 block">Current Company</span>
-                      <span className="font-bold text-white">{conversationMemory.current_company || '—'}</span>
+                      <span className="font-bold text-white break-words">{conversationMemory.current_company || '—'}</span>
                     </div>
-                    <div className="p-2 rounded bg-slate-950 border border-slate-800">
+                    <div className="p-2 rounded bg-slate-950 border border-slate-800 min-w-0">
                       <span className="text-slate-400 block">Designation</span>
-                      <span className="font-bold text-white">{conversationMemory.designation || '—'}</span>
+                      <span className="font-bold text-white break-words">{conversationMemory.designation || '—'}</span>
                     </div>
-                    <div className="p-2 rounded bg-slate-950 border border-slate-800">
+                    <div className="p-2 rounded bg-slate-950 border border-slate-800 min-w-0">
                       <span className="text-slate-400 block">Real Estate Exp</span>
-                      <span className="font-bold text-emerald-400">{conversationMemory.real_estate_experience || '—'}</span>
+                      <span className="font-bold text-emerald-400 break-words">{conversationMemory.real_estate_experience || '—'}</span>
                     </div>
-                    <div className="p-2 rounded bg-slate-950 border border-slate-800">
+                    <div className="p-2 rounded bg-slate-950 border border-slate-800 min-w-0">
                       <span className="text-slate-400 block">Expected CTC</span>
-                      <span className="font-bold text-emerald-300">{conversationMemory.expected_salary || '—'}</span>
+                      <span className="font-bold text-emerald-300 break-words">{conversationMemory.expected_salary || '—'}</span>
                     </div>
                   </div>
                   <div className="p-2 rounded bg-slate-950 border border-slate-800 mt-2">
                     <span className="text-slate-400 text-[10px] block">Next Action:</span>
-                    <span className="font-bold text-amber-400">{conversationMemory.next_action || 'Screening in progress'}</span>
+                    <span className="font-bold text-amber-400 break-words">{conversationMemory.next_action || 'Screening in progress'}</span>
                   </div>
                 </div>
               </div>
@@ -1391,17 +1416,17 @@ export const VoiceCallModal: React.FC<VoiceCallModalProps> = ({
               <div className="space-y-3 text-xs">
                 {/* Real-Time Communication Tone Header */}
                 <div className="p-3 rounded-xl bg-slate-900/90 border border-slate-800 space-y-2">
-                  <div className="flex items-center justify-between border-b border-slate-800 pb-2">
-                    <div className="flex items-center gap-1.5">
-                      <Brain className="w-4 h-4 text-amber-400" />
+                  <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-800 pb-2">
+                    <div className="flex items-center gap-1.5 min-w-0">
+                      <Brain className="w-4 h-4 text-amber-400 shrink-0" />
                       <span className="font-bold text-white text-[11px]">Real-Time Tone & Signal Analysis</span>
                     </div>
-                    <span className="text-[10px] px-2 py-0.5 rounded font-mono font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30">
+                    <span className="text-[10px] px-2 py-0.5 rounded font-mono font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30 shrink-0">
                       LIVE
                     </span>
                   </div>
 
-                  <div className="grid grid-cols-2 gap-2 text-[11px] pt-1">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[11px] pt-1">
                     <div className="p-2 rounded-lg bg-slate-950/60 border border-slate-800">
                       <span className="text-slate-400 text-[10px] block">Current Tone:</span>
                       <span className="font-bold text-white capitalize">
@@ -1495,11 +1520,11 @@ export const VoiceCallModal: React.FC<VoiceCallModalProps> = ({
             {rightPanelTab === 'action' && (
               <div className="space-y-3 text-xs">
                 <div className="bg-slate-900/80 p-3 rounded-xl border border-slate-800 space-y-2.5 text-[11px]">
-                  <div className="flex items-center justify-between pb-2 border-b border-slate-800">
+                  <div className="flex flex-wrap items-center justify-between gap-2 pb-2 border-b border-slate-800">
                     <span className="text-slate-400">Target Role:</span>
-                    <span className="font-bold text-white">{afterCallAction?.target_role || candidate.appliedRole}</span>
+                    <span className="font-bold text-white text-right break-words min-w-0">{afterCallAction?.target_role || candidate.appliedRole}</span>
                   </div>
-                  <div className="flex items-center justify-between pb-2 border-b border-slate-800">
+                  <div className="flex flex-wrap items-center justify-between gap-2 pb-2 border-b border-slate-800">
                     <span className="text-slate-400">Interview Status:</span>
                     <span className="font-semibold text-amber-300">
                       {bookedSlotId ? 'SCHEDULED' : 'PENDING_SLOT'}

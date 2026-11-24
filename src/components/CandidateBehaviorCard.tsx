@@ -142,7 +142,7 @@ export const CandidateBehaviorCard: React.FC<CandidateBehaviorCardProps> = ({
 
       {/* Primary Style Summary */}
       <div className="p-3 rounded-lg bg-slate-950/70 border border-slate-800 text-xs text-slate-200">
-        <div className="flex items-center justify-between text-[11px] font-bold text-amber-400 mb-1">
+        <div className="flex items-center justify-between flex-wrap gap-1 text-[11px] font-bold text-amber-400 mb-1">
           <span>Observed Communication Style:</span>
           <span className="text-[10px] font-normal text-slate-400 uppercase tracking-wider">
             {report.communicationStyle.primaryTone} • {report.communicationStyle.isBrief ? 'Brief' : report.communicationStyle.isDetailed ? 'Detailed' : 'Conversational'}
@@ -239,15 +239,15 @@ export const CandidateBehaviorCard: React.FC<CandidateBehaviorCardProps> = ({
 
       {/* Multi-Dimensional Behavior Score Breakdown (Rule 26, 27) */}
       <div className="p-3 rounded-lg bg-slate-950/60 border border-slate-800 text-xs">
-        <div className="flex items-center justify-between mb-2">
+        <div className="flex items-center justify-between flex-wrap gap-1.5 mb-2">
           <span className="font-bold text-slate-300 text-[11px] flex items-center gap-1.5">
-            <Award className="w-3.5 h-3.5 text-amber-400" />
+            <Award className="w-3.5 h-3.5 text-amber-400 shrink-0" />
             <span>Multi-Dimensional Behavior Ratings (1–5 Scale)</span>
           </span>
           <span className="text-[10px] text-slate-500">Non-personality rating</span>
         </div>
 
-        <div className="grid grid-cols-3 gap-2 text-[10px] text-center">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-[10px] text-center">
           <div className="p-2 rounded bg-slate-900 border border-slate-800">
             <div className="text-slate-400 mb-1">Communication</div>
             <div className="text-amber-300 font-bold text-xs">
@@ -379,7 +379,7 @@ export const CandidateBehaviorCard: React.FC<CandidateBehaviorCardProps> = ({
       </div>
 
       {/* Ethical Guardrails Footer (Rule 23, 25, 27) */}
-      <div className="pt-2 border-t border-slate-800/80 flex items-center justify-between text-[10px] text-slate-500">
+      <div className="pt-2 border-t border-slate-800/80 flex items-center justify-between flex-wrap gap-2 text-[10px] text-slate-500">
         <span>White Collar Realty Ethics Guardrails Active</span>
         <span>Observable evidence only • No personality inference</span>
       </div>

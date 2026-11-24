@@ -190,7 +190,7 @@ export class CandidateRepository {
   }
 
   /**
-   * Rule 16 Calling Lock: Atomically acquire lock before initiating an AI or Vapi call
+   * Rule 16 Calling Lock: Atomically acquire lock before initiating a Gemini Voice AI or PSTN call
    */
   public async acquireCallingLock(
     candidateId: string,

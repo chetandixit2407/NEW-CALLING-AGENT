@@ -30,7 +30,8 @@ import {
   calculateCandidatePriority,
   isWithinCallingWindow,
 } from './eligibility';
-import { CallProvider, dryRunCallProvider } from './providers/callProvider';
+import { CallProvider, dryRunCallProvider, twilioLiveCallProvider } from './providers/callProvider';
+import { twilioTelephonyService } from '../telephony/twilioTelephonyService';
 import { candidateRepository } from '../repositories/candidateRepository';
 import { followupRepository } from '../repositories/followupRepository';
 import { aiHrBrain } from '../ai/hrBrain';
@@ -45,7 +46,7 @@ const EVENTS_COLLECTION = 'automation_events';
 
 export const DEFAULT_AUTOMATION_SETTINGS: AutomationSettings = {
   enabled: false, // Default is false: requires explicit start action
-  automationMode: 'DRY_RUN', // Default is DRY_RUN: ZERO real PSTN/Vapi calls
+  automationMode: 'DRY_RUN', // Default is DRY_RUN: ZERO real PSTN calls
   dailyTarget: 200,
   maxConcurrentCalls: 5,
   callingWindowStart: '10:00',
@@ -139,10 +140,20 @@ export class CallingQueueManager {
    * Update automation settings and persist
    */
   public async updateSettings(partial: Partial<AutomationSettings>): Promise<AutomationSettings> {
+    if (partial.automationMode === 'LIVE') {
+      const cfg = twilioTelephonyService.getConfigStatus();
+      if (!cfg.configured) {
+        throw new Error(
+          `Cannot enable LIVE PSTN mode until Twilio & Gemini server credentials are configured. Missing: ${cfg.missingVars.join(', ')}`
+        );
+      }
+    }
+
     this.settings = {
       ...this.settings,
       ...partial,
     };
+    this.callProvider = this.settings.automationMode === 'LIVE' ? twilioLiveCallProvider : dryRunCallProvider;
 
     if (DATABASE_PROVIDER === 'firestore') {
       try {
@@ -406,6 +417,18 @@ export class CallingQueueManager {
    * Start Automation Queue
    */
   public async startAutomation(forceEnable: boolean = false): Promise<{ success: boolean; message: string }> {
+    if (this.settings.automationMode === 'LIVE') {
+      const cfg = twilioTelephonyService.getConfigStatus();
+      if (!cfg.configured) {
+        return {
+          success: false,
+          message: `Cannot start LIVE PSTN automation. Missing server env vars: ${cfg.missingVars.join(', ')}`,
+        };
+      }
+    }
+
+    this.callProvider = this.settings.automationMode === 'LIVE' ? twilioLiveCallProvider : dryRunCallProvider;
+
     if (forceEnable) {
       await this.updateSettings({ enabled: true });
     } else if (!this.settings.enabled) {
@@ -598,8 +621,9 @@ export class CallingQueueManager {
       aiHrBrain.getOrCreateCandidateMemory(candidate);
       const nextCallBrief = aiHrBrain.getNextCallBrief(candidate, candidate.callHistory || []);
 
-      // Step 11: Execute Call Simulation via CallProvider
-      const simulation = await this.callProvider.executeCall(candidate, job.jobId, options.forcedOutcome);
+      // Step 11: Execute Call via active CallProvider (TwilioLiveCallProvider in LIVE mode, DryRunCallProvider in DRY_RUN)
+      const provider = this.settings.automationMode === 'LIVE' ? twilioLiveCallProvider : this.callProvider;
+      const simulation = await provider.executeCall(candidate, job.jobId, options.forcedOutcome);
       callOutcome = simulation.outcome;
 
       // Optional short sleep for test speed simulation

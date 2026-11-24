@@ -317,10 +317,10 @@ export function setupGeminiLiveWebSocket(server: http.Server, app?: any) {
     initData: LiveSessionInitData,
     sendMsg: (msg: any) => void
   ) {
-    const apiKey = process.env.GEMINI_API_KEY;
+    const apiKey = (process.env.GEMINI_API_KEY || process.env.API_KEY || '').trim();
     if (!apiKey) {
-      const errText = 'GEMINI_API_KEY is not configured in server environment.';
-      console.error(`[Gemini Live] ${errText}`);
+      const errText = 'Gemini Live API key is not configured on the server. Please add GEMINI_API_KEY in Settings > Secrets.';
+      console.warn(`[Gemini Live] ${errText}`);
       sendMsg({
         type: 'error',
         sessionId,
@@ -602,7 +602,7 @@ export function setupGeminiLiveWebSocket(server: http.Server, app?: any) {
   if (app) {
     // 1. Live status check
     app.get('/api/live-status', (req: any, res: any) => {
-      const apiKey = process.env.GEMINI_API_KEY;
+      const apiKey = (process.env.GEMINI_API_KEY || process.env.API_KEY || '').trim();
       res.json({
         status: 'ok',
         hasKey: !!apiKey,
@@ -617,6 +617,13 @@ export function setupGeminiLiveWebSocket(server: http.Server, app?: any) {
       const { sessionId, candidate, scenario, availableSlots, languagePreference } = req.body || {};
       if (!sessionId) {
         return res.status(400).json({ error: 'sessionId is required' });
+      }
+
+      const apiKey = (process.env.GEMINI_API_KEY || process.env.API_KEY || '').trim();
+      if (!apiKey) {
+        return res.status(503).json({
+          error: 'Gemini Live API key is not configured on the server. Please add GEMINI_API_KEY in Settings > Secrets.',
+        });
       }
 
       console.log(`[Gemini Live HTTP] Starting session ${sessionId}`);

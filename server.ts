@@ -29,10 +29,10 @@ dotenv.config();
 const app = express();
 app.set('trust proxy', 1);
 const server = http.createServer(app);
-setupGeminiLiveWebSocket(server, app);
 const PORT = 3000;
 
 app.use(express.json({ limit: '10mb' }));
+setupGeminiLiveWebSocket(server, app);
 
 // Ensure Google Sign-In & OAuth popups can communicate cleanly across Chrome and Edge
 app.use((req, res, next) => {
@@ -66,7 +66,7 @@ app.use('/api/auth', createAuthRouter());
 let aiClient: GoogleGenAI | null = null;
 function getGenAI(): GoogleGenAI | null {
   if (!aiClient) {
-    const apiKey = process.env.GEMINI_API_KEY;
+    const apiKey = (process.env.GEMINI_API_KEY || process.env.API_KEY || '').trim();
     if (!apiKey) {
       console.warn('GEMINI_API_KEY not found in environment. Fallback conversational engine will be used.');
       return null;
@@ -87,7 +87,7 @@ function getGenAI(): GoogleGenAI | null {
 app.get('/api/health', (req, res) => {
   res.json({
     status: 'ok',
-    hasGeminiKey: !!process.env.GEMINI_API_KEY,
+    hasGeminiKey: Boolean((process.env.GEMINI_API_KEY || process.env.API_KEY || '').trim()),
     timestamp: new Date().toISOString(),
   });
 });

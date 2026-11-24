@@ -90,32 +90,32 @@ export const ScheduleCallModal: React.FC<ScheduleCallModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-xs flex items-center justify-center p-4">
-      <div className="bg-[#0f172a] border border-amber-500/30 rounded-2xl w-full max-w-lg overflow-hidden shadow-2xl animate-in fade-in zoom-in-95 duration-200">
+    <div className="fixed inset-0 z-50 overflow-y-auto bg-black/80 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4">
+      <div className="bg-[#0f172a] border border-amber-500/30 rounded-2xl w-full max-w-lg max-h-[92vh] flex flex-col overflow-hidden shadow-2xl animate-in fade-in zoom-in-95 duration-200">
         
         {/* Header */}
-        <div className="bg-gradient-to-r from-slate-900 via-amber-950/40 to-slate-900 p-5 border-b border-slate-800 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-amber-500/20 text-amber-400 border border-amber-500/40 flex items-center justify-center shadow-xs">
+        <div className="bg-gradient-to-r from-slate-900 via-amber-950/40 to-slate-900 p-4 sm:p-5 border-b border-slate-800 flex items-center justify-between gap-3 shrink-0">
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="w-10 h-10 rounded-xl bg-amber-500/20 text-amber-400 border border-amber-500/40 flex items-center justify-center shadow-xs shrink-0">
               <Calendar className="w-5 h-5" />
             </div>
-            <div>
-              <div className="flex items-center gap-2">
+            <div className="min-w-0">
+              <div className="flex items-center flex-wrap gap-2">
                 <h3 className="font-bold text-white text-base font-['Space_Grotesk']">
                   Schedule AI Follow-up Call
                 </h3>
-                <span className="px-2 py-0.5 text-[10px] font-bold rounded-md bg-amber-500/10 text-amber-400 border border-amber-500/20 uppercase tracking-wide">
+                <span className="px-2 py-0.5 text-[10px] font-bold rounded-md bg-amber-500/10 text-amber-400 border border-amber-500/20 uppercase tracking-wide shrink-0">
                   Agent Arjun
                 </span>
               </div>
-              <p className="text-xs text-slate-400 mt-0.5">
-                Auto-trigger Gemini Live / Vapi call to <span className="text-amber-300 font-semibold">{candidate.name}</span>
+              <p className="text-xs text-slate-400 mt-0.5 break-words">
+                Auto-trigger Gemini Voice AI call to <span className="text-amber-300 font-semibold">{candidate.name}</span>
               </p>
             </div>
           </div>
           <button
             onClick={onClose}
-            className="text-slate-400 hover:text-white p-1.5 rounded-lg bg-slate-800/80 hover:bg-slate-800 transition"
+            className="text-slate-400 hover:text-white p-1.5 rounded-lg bg-slate-800/80 hover:bg-slate-800 transition shrink-0"
           >
             <X className="w-4 h-4" />
           </button>
@@ -123,10 +123,10 @@ export const ScheduleCallModal: React.FC<ScheduleCallModalProps> = ({
 
         {/* Existing Schedule Warning/Badge if already set */}
         {candidate.scheduledCall && candidate.scheduledCall.status === 'pending' && (
-          <div className="bg-amber-500/10 border-b border-amber-500/20 px-5 py-2.5 flex items-center justify-between text-xs text-amber-300">
-            <div className="flex items-center gap-2">
-              <BellRing className="w-4 h-4 text-amber-400 animate-pulse" />
-              <span>
+          <div className="bg-amber-500/10 border-b border-amber-500/20 px-4 sm:px-5 py-2.5 flex flex-wrap items-center justify-between gap-2 text-xs text-amber-300 shrink-0">
+            <div className="flex items-center gap-2 min-w-0">
+              <BellRing className="w-4 h-4 text-amber-400 animate-pulse shrink-0" />
+              <span className="break-words">
                 Existing Call Scheduled: <strong>{candidate.scheduledCall.date} at {candidate.scheduledCall.time}</strong> ({candidate.scheduledCall.scenario})
               </span>
             </div>
@@ -137,7 +137,7 @@ export const ScheduleCallModal: React.FC<ScheduleCallModalProps> = ({
                   onCancelSchedule(candidate.id);
                   onClose();
                 }}
-                className="text-xs text-rose-400 hover:text-rose-300 underline font-semibold cursor-pointer"
+                className="text-xs text-rose-400 hover:text-rose-300 underline font-semibold cursor-pointer shrink-0"
               >
                 Cancel Call
               </button>
@@ -146,13 +146,13 @@ export const ScheduleCallModal: React.FC<ScheduleCallModalProps> = ({
         )}
 
         {/* Form Body */}
-        <form onSubmit={handleSave} className="p-5 space-y-4">
+        <form onSubmit={handleSave} className="p-4 sm:p-5 space-y-4 overflow-y-auto">
           {/* Quick presets */}
           <div>
             <label className="block text-xs font-semibold text-slate-300 mb-2">
               Quick Timers
             </label>
-            <div className="grid grid-cols-3 gap-2">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
               <button
                 type="button"
                 onClick={() => handleSetQuickPreset(15)}
@@ -178,7 +178,7 @@ export const ScheduleCallModal: React.FC<ScheduleCallModalProps> = ({
           </div>
 
           {/* Date & Time Picker */}
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label className="block text-xs font-semibold text-slate-300 mb-1.5 flex items-center gap-1.5">
                 <Calendar className="w-3.5 h-3.5 text-amber-400" />
